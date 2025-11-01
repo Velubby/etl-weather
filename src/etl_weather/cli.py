@@ -1,6 +1,7 @@
 import typer
 from .config import settings
 from .fetch import run as fetch_run
+from .transform import run as transform_run
 
 app = typer.Typer(help="ETL Cuaca & Kualitas Udara")
 
@@ -23,6 +24,18 @@ def fetch(
         f"Selesai ambil data '{res['location_name']}'. "
         f"Latest: {res['weather_latest']} , {res['air_latest']}"
     )
+
+
+@app.command()
+def transform(
+    city: str = typer.Option(
+        None, help="Nama kota; gunakan yang sama dengan saat fetch"
+    ),
+    output: str = typer.Option(None, help="Path output CSV (opsional)"),
+) -> None:
+    c = city or settings.city
+    out = transform_run(c, out_path=output)
+    typer.echo(f"Berhasil transform -> {out}")
 
 
 if __name__ == "__main__":
