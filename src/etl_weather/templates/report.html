@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <title>Laporan Cuaca & Kualitas Udara — {{ city }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --fg:#111; --muted:#666; --bg:#fff; --card:#f7f7f9; --acc:#1967d2; }
+    * { box-sizing: border-box; }
+    body { font: 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--fg); background: var(--bg); margin: 0; }
+    header { padding: 24px 20px; background: linear-gradient(120deg, #e9f0ff, #f6f9ff); border-bottom: 1px solid #e4e6eb; }
+    header h1 { margin: 0 0 6px 0; font-size: 24px; }
+    header p { margin: 0; color: var(--muted); }
+    main { max-width: 980px; margin: 24px auto; padding: 0 16px 48px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .card { background: var(--card); border: 1px solid #eceef2; border-radius: 12px; padding: 14px 16px; }
+    .card h3 { margin: 0 0 6px 0; font-size: 15px; color: #222; }
+    .val { font-weight: 600; font-size: 18px; }
+    section { margin: 22px 0; }
+    .charts > div { margin: 12px 0; border: 1px solid #eceef2; border-radius: 12px; overflow: hidden; }
+    footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#333; border:1px solid #e0e7ff; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Laporan Cuaca & Kualitas Udara — {{ city }}</h1>
+    <p>Periode: <b>{{ start }}</b> s/d <b>{{ end }}</b></p>
+  </header>
+  <main>
+    <section class="grid">
+      <div class="card">
+        <h3>Suhu maksimum tertinggi</h3>
+        <div class="val">{{ max_temp }} °C</div>
+      </div>
+      <div class="card">
+        <h3>Hari paling basah</h3>
+        <div class="val">{{ wettest_date }} <span class="badge">{{ wettest_rain }} mm</span></div>
+      </div>
+      <div class="card">
+        <h3>Rata-rata PM2.5</h3>
+        <div class="val">{{ pm25_avg }}</div>
+        <div class="badge">{{ pm25_category }}</div>
+      </div>
+      <div class="card">
+        <h3>Jumlah hari hujan</h3>
+        <div class="val">{{ rainy_days }}</div>
+      </div>
+    </section>
+
+    <section class="charts">
+      <h2>Grafik</h2>
+      {% for chart_html in charts %}
+        <div>{{ chart_html | safe }}</div>
+      {% endfor %}
+    </section>
+
+    <section>
+      <h2>Rekomendasi</h2>
+      <p>{{ recommendation }}</p>
+    </section>
+
+    <footer>
+      Sumber data: Open‑Meteo (cuaca & kualitas udara). Laporan ini otomatis dibuat oleh ETL Weather (projek UAS). Akurasi bergantung pada sumber data.
+    </footer>
+  </main>
+</body>
+</html>

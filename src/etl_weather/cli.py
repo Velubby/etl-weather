@@ -1,10 +1,9 @@
 import typer
-from pathlib import Path
 
 from .config import settings
 from .fetch import run as fetch_run
 from .transform import run as transform_run
-from .viz import build_charts, save_charts_html
+from .report import run as report_run
 
 app = typer.Typer(help="ETL Cuaca & Kualitas Udara")
 
@@ -42,25 +41,33 @@ def transform(
 
 
 @app.command()
-def viz(
-    city: str = typer.Option(None, help="Nama kota (gunakan CSV hasil transform)"),
-    input: str = typer.Option(None, help="Path CSV, jika tidak pakai city"),
-    outdir: str = typer.Option("reports/assets", help="Folder output HTML grafik"),
+def report(
+    city: str = typer.Option(None, help="Nama kota (default dari .env atau config)"),
+    input: str = typer.Option(None, help="Path CSV (opsional, override)"),
+    output: str = typer.Option(
+        None, help="Path HTML output (default: reports/<city>.html)"
+    ),
 ) -> None:
-    if input:
-        csv_path = Path(input)
-    else:
-        c = city or settings.city
-        csv_path = Path("data/processed") / f"{c.lower().replace(' ', '-')}_daily.csv"
-    if not csv_path.exists():
-        raise typer.BadParameter(
-            f"CSV tidak ditemukan: {csv_path}. Jalankan transform dulu."
-        )
-    charts = list(build_charts(csv_path))
-    files = save_charts_html(charts, outdir)
-    typer.echo("Grafik disimpan:")
-    for f in files:
-        typer.echo(f" - {f}")
+    c = city or settings.city
+    out = report_run(c, output=output, csv_path=input)
+    typer.echo(f"Laporan tersimpan -> {out}")
+
+
+@app.command()
+def all(
+    city: str = typer.Option(None, help="Nama kota"),
+    days: int = typer.Option(7, help="Jumlah hari forecast"),
+    timezone: str = typer.Option(None, help="Timezone, contoh: Asia/Jakarta"),
+    output: str = typer.Option(
+        None, help="Path HTML output (default: reports/<city>.html)"
+    ),
+) -> None:
+    c = city or settings.city
+    tz = timezone or settings.timezone
+    fetch_run(c, days=days, timezone=tz)
+    transform_run(c)
+    out = report_run(c, output=output)
+    typer.echo(f"Selesai. Laporan: {out}")
 
 
 if __name__ == "__main__":
