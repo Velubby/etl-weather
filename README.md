@@ -2,10 +2,11 @@
 
 Ambil data cuaca + kualitas udara per jam, agregasi harian, visualisasi, dan render laporan HTML.
 
-## Menjalankan test
+## Testing
 pip install -e ".[dev]"
 pytest -q
-
+# dengan coverage:
+pytest -q --cov=etl_weather --cov-report=term-missing
 ## Struktur test
 - tests/fixtures/ : sample JSON untuk offline test (tanpa internet)
 - test_fetch.py    : mock geocoding dan HTTP; verifikasi file raw tersimpan
