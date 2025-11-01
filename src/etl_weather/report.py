@@ -175,3 +175,6 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
     out_path.write_text(html, encoding="utf-8")
     LOG.info("Saved report -> %s", out_path)
     return str(out_path)
+
+
+__all__ = ["run", "_simple_recommendation", "_pm25_category"]

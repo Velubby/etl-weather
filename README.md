@@ -2,16 +2,12 @@
 
 Ambil data cuaca + kualitas udara per jam, agregasi harian, visualisasi, dan render laporan HTML.
 
-## Cepat mulai
+## Menjalankan test
 pip install -e ".[dev]"
-etl-weather hello --name ETL
+pytest -q
 
-## Fitur (rencana)
-- Fetch: Open-Meteo (weather + air quality), cache lokal
-- Transform: agregasi harian (suhu min/max, total hujan, rata-rata PM)
-- Viz: grafik tren (Altair)
-- Report: HTML via Jinja2
-- CLI: Typer
-
-## Struktur
-src/etl_weather/*; data/raw, data/processed; reports/
+## Struktur test
+- tests/fixtures/ : sample JSON untuk offline test (tanpa internet)
+- test_fetch.py    : mock geocoding dan HTTP; verifikasi file raw tersimpan
+- test_transform.py: gunakan fixtures -> hasilkan CSV harian
+- test_report.py   : uji aturan rekomendasi & kategori PM2.5

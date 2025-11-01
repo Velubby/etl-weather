@@ -14,9 +14,7 @@ LOG = logging.getLogger(__name__)
 RAW_DIR = Path("data") / "raw"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {
-    "User-Agent": "etl-weather/0.1 (student project; https://open-meteo.com/)",
-}
+HEADERS = {"User-Agent": "etl-weather/0.1 (student project; https://open-meteo.com/)"}
 
 
 class NetworkError(RuntimeError):
@@ -73,7 +71,10 @@ def _fetch_weather_air(
 
 
 def run(city: str, days: int = 7, timezone: Optional[str] = None) -> Dict[str, str]:
-    # Geocoding
+    """Ambil data cuaca dan kualitas udara untuk sebuah kota dan simpan ke data/raw.
+    Returns: dict path keluaran (arsip bertimestamp + latest)."""
+    if days < 1 or days > 16:
+        raise ValueError("days harus 1–16 untuk Open-Meteo")
     loc = geocode_city(city)
     tz = timezone or loc.get("timezone") or "auto"
     LOG.info(
@@ -83,11 +84,8 @@ def run(city: str, days: int = 7, timezone: Optional[str] = None) -> Dict[str, s
         loc["lon"],
         tz,
     )
-
-    # Fetch
     weather, air = _fetch_weather_air(loc["lat"], loc["lon"], days, tz)
 
-    # Simpan dua versi: bertimestamp (arsip) dan latest (mudah dipakai)
     slug = slugify(city)
     ts = time.strftime("%Y%m%dT%H%M%S")
     weather_ts = RAW_DIR / f"{slug}_weather_{ts}.json"
