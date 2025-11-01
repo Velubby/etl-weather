@@ -1,0 +1,29 @@
+# venv & caches
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# build/artifacts
+dist/
+build/
+*.egg-info/
+
+# project data & reports (keep only .gitkeep)
+data/*
+!data/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# env & logs
+.env
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
