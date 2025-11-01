@@ -1,5 +1,7 @@
 from __future__ import annotations
 import httpx
+import re
+import unicodedata
 
 
 def geocode_city(city: str) -> dict:
@@ -19,3 +21,11 @@ def geocode_city(city: str) -> dict:
         "lon": res["longitude"],
         "timezone": res.get("timezone", "auto"),
     }
+
+
+def slugify(text: str) -> str:
+    # Normalisasi dan hilangkan aksen, ganti non-alfanumerik dengan '-'
+    text_norm = unicodedata.normalize("NFKD", text)
+    text_no_accents = "".join(c for c in text_norm if not unicodedata.combining(c))
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", text_no_accents).strip("-").lower()
+    return slug or "city"
