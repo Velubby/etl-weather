@@ -20,18 +20,29 @@ def hello(name: str = "world") -> None:
 @app.command()
 def fetch(
     city: str = typer.Option(None, help="Nama kota (default dari .env atau config)"),
-    days: int = typer.Option(7, help="Jumlah hari forecast (1–16 untuk Open-Meteo)"),
+    days: int = typer.Option(7, help="Jumlah hari forecast (1–16)"),
     timezone: str = typer.Option(None, help="Timezone, contoh: Asia/Jakarta"),
+    offline: bool = typer.Option(False, help="Gunakan sample offline di data/samples"),
+    sample_dir: str = typer.Option(None, help="Folder sample (opsional)"),
+    no_fallback: bool = typer.Option(
+        False, help="Matikan fallback ke sample saat network gagal"
+    ),
 ) -> None:
     if days < 1 or days > 16:
         _fail("Parameter --days harus 1–16.")
     try:
         c = city or settings.city
         tz = timezone or settings.timezone
-        res = fetch_run(c, days=days, timezone=tz)
+        res = fetch_run(
+            c,
+            days=days,
+            timezone=tz,
+            offline=offline,
+            sample_dir=sample_dir,
+            fallback=not no_fallback,
+        )
         typer.echo(
-            f"Selesai ambil data '{res['location_name']}'. "
-            f"Latest: {res['weather_latest']} , {res['air_latest']}"
+            f"Selesai ambil data. Latest: {res['weather_latest']} , {res['air_latest']}"
         )
     except Exception as e:
         _fail(f"Gagal fetch: {e}")
@@ -72,17 +83,25 @@ def report(
 def all(
     city: str = typer.Option(None, help="Nama kota"),
     days: int = typer.Option(7, help="Jumlah hari forecast (1–16)"),
-    timezone: str = typer.Option(None, help="Timezone, contoh: Asia/Jakarta"),
-    output: str = typer.Option(
-        None, help="Path HTML output (default: reports/<city>.html)"
-    ),
+    timezone: str = typer.Option(None, help="Timezone"),
+    output: str = typer.Option(None, help="Path HTML output"),
+    offline: bool = typer.Option(False, help="Gunakan sample offline"),
+    sample_dir: str = typer.Option(None, help="Folder sample (opsional)"),
+    no_fallback: bool = typer.Option(False, help="Matikan fallback sample"),
 ) -> None:
     if days < 1 or days > 16:
         _fail("Parameter --days harus 1–16.")
     try:
         c = city or settings.city
         tz = timezone or settings.timezone
-        fetch_run(c, days=days, timezone=tz)
+        fetch_run(
+            c,
+            days=days,
+            timezone=tz,
+            offline=offline,
+            sample_dir=sample_dir,
+            fallback=not no_fallback,
+        )
         transform_run(c)
         out = report_run(c, output=output)
         typer.echo(f"Selesai. Laporan: {out}")
