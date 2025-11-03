@@ -105,6 +105,20 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
     rainy_days = int((df["total_rain"] > 0).sum()) if "total_rain" in df.columns else 0
     pm25_cat = _pm25_category(pm25_avg if pm25_avg is not None else float("nan"))
 
+    # Sunrise/Sunset ringkas (opsional bila tersedia)
+    sunrise_earliest = None
+    sunset_latest = None
+    if "sunrise" in df.columns and not df["sunrise"].isna().all():
+        try:
+            sunrise_earliest = pd.to_datetime(df["sunrise"], errors="coerce").min()
+        except Exception:
+            sunrise_earliest = None
+    if "sunset" in df.columns and not df["sunset"].isna().all():
+        try:
+            sunset_latest = pd.to_datetime(df["sunset"], errors="coerce").max()
+        except Exception:
+            sunset_latest = None
+
     # Grafik (Altair)
     charts = list(build_charts(csv))
     charts_html = charts_to_html(charts)
@@ -135,6 +149,14 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
             rainy_days=rainy_days,
             charts=charts_html,
             recommendation=recommendation,
+            sunrise_earliest=(
+                sunrise_earliest.strftime("%H:%M")
+                if sunrise_earliest is not None
+                else "-"
+            ),
+            sunset_latest=(
+                sunset_latest.strftime("%H:%M") if sunset_latest is not None else "-"
+            ),
         )
     else:
         # Fallback template minimal
@@ -148,6 +170,7 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
   <li>Hari paling basah: {{ wettest_date }} ({{ wettest_rain }} mm)</li>
   <li>Rata-rata PM2.5: {{ pm25_avg }} ({{ pm25_category }})</li>
   <li>Jumlah hari hujan: {{ rainy_days }}</li>
+  <li>Rentang waktu terbit/terbenam (periode): {{ sunrise_earliest }} / {{ sunset_latest }}</li>
 </ul>
 <h2>Grafik</h2>
 {% for c in charts %} {{ c | safe }} {% endfor %}
@@ -167,6 +190,14 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
             rainy_days=rainy_days,
             charts=charts_html,
             recommendation=recommendation,
+            sunrise_earliest=(
+                sunrise_earliest.strftime("%H:%M")
+                if sunrise_earliest is not None
+                else "-"
+            ),
+            sunset_latest=(
+                sunset_latest.strftime("%H:%M") if sunset_latest is not None else "-"
+            ),
         )
 
     # Simpan file

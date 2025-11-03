@@ -85,7 +85,7 @@ def run(city: str, out_path: Optional[str] = None) -> str:
     # Hapus baris tanpa date valid
     df = df.dropna(subset=["date"])
 
-    # Agregasi harian
+    # Agregasi harian dari data per jam
     daily = (
         df.groupby("date", dropna=False)
         .agg(
@@ -107,6 +107,30 @@ def run(city: str, out_path: Optional[str] = None) -> str:
 
     # Tambah kategori PM2.5
     daily["pm25_category"] = [_categorize_pm25(v) for v in daily["pm25_avg"].tolist()]
+
+    # Gabungkan informasi harian dari API (sunrise/sunset, jika tersedia)
+    w_daily = weather.get("daily", {}) if isinstance(weather, dict) else {}
+    if isinstance(w_daily, dict) and (
+        w_daily.get("time") or w_daily.get("sunrise") or w_daily.get("sunset")
+    ):
+        # Bangun frame harian aman untuk sunrise/sunset
+        times = w_daily.get("time", []) or []
+        n = len(times)
+
+        def _fit(vals):
+            vals = vals or []
+            return vals if isinstance(vals, list) and len(vals) == n else [None] * n
+
+        dapi = pd.DataFrame(
+            {
+                "date": pd.to_datetime(times, errors="coerce").date,
+                "sunrise": _fit(w_daily.get("sunrise")),
+                "sunset": _fit(w_daily.get("sunset")),
+            }
+        )
+        dapi = dapi.dropna(subset=["date"])  # buang baris tanpa tanggal
+        # Merge kiri agar kolom tambahan muncul bila cocok
+        daily = daily.merge(dapi, on="date", how="left")
 
     # Simpan
     out_file = Path(out_path) if out_path else PROC_DIR / f"{slug}_daily.csv"
