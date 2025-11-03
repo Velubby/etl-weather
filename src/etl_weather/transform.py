@@ -115,3 +115,76 @@ def run(city: str, out_path: Optional[str] = None) -> str:
     LOG.info("Saved daily aggregates -> %s", out_file)
 
     return str(out_file)
+
+
+def run_hourly(city: str, out_path: Optional[str] = None) -> str:
+    """Transform: gabungkan cuaca + udara per jam -> simpan CSV hourly.
+
+    Kolom yang dihasilkan bersifat best-effort:
+    - Wajib: time, temp, rain, pm25, pm10
+    - Opsional (jika tersedia di sumber): rh (kelembaban %), wind (km/jam),
+      feels_like (apparent_temperature), wcode (weather_code), date
+    """
+    slug = slugify(city)
+    weather_path = RAW_DIR / f"{slug}_weather.json"
+    air_path = RAW_DIR / f"{slug}_air.json"
+
+    if not weather_path.exists() or not air_path.exists():
+        raise FileNotFoundError(
+            f"File raw belum tersedia untuk '{city}'. Jalankan dulu: etl-weather fetch --city \"{city}\""
+        )
+
+    # Load JSON
+    weather = json.loads(weather_path.read_text(encoding="utf-8"))
+    air = json.loads(air_path.read_text(encoding="utf-8"))
+
+    # Siapkan kolom hourly yang mungkin tersedia
+    hw = _safe_hourly_frame(
+        weather.get("hourly", {}),
+        [
+            "temperature_2m",
+            "precipitation",
+            "relative_humidity_2m",
+            "wind_speed_10m",
+            "apparent_temperature",
+            "weather_code",
+        ],
+    )
+    ha = _safe_hourly_frame(air.get("hourly", {}), ["pm2_5", "pm10"])
+
+    # Rename kolom ringkas
+    hw = hw.rename(
+        columns={
+            "temperature_2m": "temp",
+            "precipitation": "rain",
+            "relative_humidity_2m": "rh",
+            "wind_speed_10m": "wind",
+            "apparent_temperature": "feels_like",
+            "weather_code": "wcode",
+        }
+    )
+    ha = ha.rename(columns={"pm2_5": "pm25", "pm10": "pm10"})
+
+    # Merge
+    df = pd.merge(hw, ha, on="time", how="outer").sort_values("time", ignore_index=True)
+
+    # Tipe data aman
+    numeric_cols = [
+        c
+        for c in ["temp", "rain", "rh", "wind", "feels_like", "pm25", "pm10"]
+        if c in df.columns
+    ]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Konversi waktu & tambah tanggal untuk kemudahan
+    df["time"] = pd.to_datetime(df["time"], errors="coerce")
+    df = df.dropna(subset=["time"]).reset_index(drop=True)
+    df["date"] = df["time"].dt.date
+
+    # Simpan
+    out_file = Path(out_path) if out_path else PROC_DIR / f"{slug}_hourly.csv"
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_file, index=False)
+    LOG.info("Saved hourly data -> %s", out_file)
+    return str(out_file)
