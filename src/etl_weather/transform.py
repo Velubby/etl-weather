@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
+import numpy as np
 
 from .utils import slugify
 
@@ -48,6 +49,20 @@ def _categorize_pm25(value: Optional[float]) -> str:
     return "Berbahaya"
 
 
+def _dew_point_series(temp_c: pd.Series, rh_pct: pd.Series) -> pd.Series:
+    """Hitung dew point (°C) dari suhu (°C) dan kelembaban relatif (%) menggunakan
+    pendekatan Magnus-Tetens. Hasil berupa Series float dengan NaN bila input tidak valid.
+    """
+    t = pd.to_numeric(temp_c, errors="coerce")
+    rh = pd.to_numeric(rh_pct, errors="coerce")
+    # Hindari log(<=0)
+    rh = rh.clip(lower=0.1, upper=100.0)
+    a, b = 17.27, 237.7
+    alpha = (a * t) / (b + t) + np.log(rh / 100.0)
+    dp = (b * alpha) / (a - alpha)
+    return pd.to_numeric(dp, errors="coerce")
+
+
 def run(city: str, out_path: Optional[str] = None) -> str:
     """Transform: gabungkan cuaca+udara per jam -> agregasi harian -> simpan CSV."""
     slug = slugify(city)
@@ -65,18 +80,31 @@ def run(city: str, out_path: Optional[str] = None) -> str:
 
     # Build hourly frames dengan penjagaan panjang
     hw = _safe_hourly_frame(
-        weather.get("hourly", {}), ["temperature_2m", "precipitation"]
+        weather.get("hourly", {}),
+        [
+            "temperature_2m",
+            "precipitation",
+            "apparent_temperature",
+            "relative_humidity_2m",
+        ],
     )
     ha = _safe_hourly_frame(air.get("hourly", {}), ["pm2_5", "pm10"])
 
     # Rename kolom ke nama ringkas
-    hw = hw.rename(columns={"temperature_2m": "temp", "precipitation": "rain"})
+    hw = hw.rename(
+        columns={
+            "temperature_2m": "temp",
+            "precipitation": "rain",
+            "apparent_temperature": "feels_like",
+            "relative_humidity_2m": "rh",
+        }
+    )
     ha = ha.rename(columns={"pm2_5": "pm25", "pm10": "pm10"})
 
     # Merge dan tipe data
     df = pd.merge(hw, ha, on="time", how="outer").sort_values("time", ignore_index=True)
     # Konversi tipe numeric aman
-    for col in ["temp", "rain", "pm25", "pm10"]:
+    for col in ["temp", "rain", "pm25", "pm10", "feels_like", "rh"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     # Waktu -> tanggal
     df["time"] = pd.to_datetime(df["time"], errors="coerce")
@@ -84,6 +112,15 @@ def run(city: str, out_path: Optional[str] = None) -> str:
 
     # Hapus baris tanpa date valid
     df = df.dropna(subset=["date"])
+
+    # Hitung dew point per jam bila memungkinkan
+    if "temp" in df.columns and "rh" in df.columns:
+        try:
+            df["dew_point"] = _dew_point_series(df["temp"], df["rh"]).astype(float)
+        except Exception:
+            df["dew_point"] = pd.NA
+    else:
+        df["dew_point"] = pd.NA
 
     # Agregasi harian dari data per jam
     daily = (
@@ -94,6 +131,8 @@ def run(city: str, out_path: Optional[str] = None) -> str:
             total_rain=("rain", "sum"),
             pm25_avg=("pm25", "mean"),
             pm10_avg=("pm10", "mean"),
+            feels_like_avg=("feels_like", "mean"),
+            dew_point_avg=("dew_point", "mean"),
         )
         .reset_index()
         .sort_values("date")
@@ -101,12 +140,40 @@ def run(city: str, out_path: Optional[str] = None) -> str:
 
     # Bersihkan nilai: hujan NaN -> 0, bulatkan
     daily["total_rain"] = daily["total_rain"].fillna(0.0)
-    daily[["temp_min", "temp_max", "total_rain", "pm25_avg", "pm10_avg"]] = daily[
-        ["temp_min", "temp_max", "total_rain", "pm25_avg", "pm10_avg"]
-    ].round(2)
+    daily[
+        [
+            "temp_min",
+            "temp_max",
+            "total_rain",
+            "pm25_avg",
+            "pm10_avg",
+            "feels_like_avg",
+            "dew_point_avg",
+        ]
+    ] = daily[
+        [
+            "temp_min",
+            "temp_max",
+            "total_rain",
+            "pm25_avg",
+            "pm10_avg",
+            "feels_like_avg",
+            "dew_point_avg",
+        ]
+    ].round(
+        2
+    )
 
     # Tambah kategori PM2.5
     daily["pm25_category"] = [_categorize_pm25(v) for v in daily["pm25_avg"].tolist()]
+
+    # Alerts sederhana (boolean) untuk membantu UI/web
+    HOT_TEMP_C = 33.0
+    HEAVY_RAIN_MM = 20.0
+    PM25_UNHEALTHY = 55.4
+    daily["is_hot_day"] = (daily["temp_max"] > HOT_TEMP_C).fillna(False)
+    daily["is_heavy_rain"] = (daily["total_rain"] >= HEAVY_RAIN_MM).fillna(False)
+    daily["is_unhealthy_pm25"] = (daily["pm25_avg"] > PM25_UNHEALTHY).fillna(False)
 
     # Gabungkan informasi harian dari API (sunrise/sunset, jika tersedia)
     w_daily = weather.get("daily", {}) if isinstance(weather, dict) else {}
@@ -205,6 +272,13 @@ def run_hourly(city: str, out_path: Optional[str] = None) -> str:
     df["time"] = pd.to_datetime(df["time"], errors="coerce")
     df = df.dropna(subset=["time"]).reset_index(drop=True)
     df["date"] = df["time"].dt.date
+
+    # Dew point per jam (opsional)
+    if "temp" in df.columns and "rh" in df.columns:
+        try:
+            df["dew_point"] = _dew_point_series(df["temp"], df["rh"]).astype(float)
+        except Exception:
+            df["dew_point"] = pd.NA
 
     # Simpan
     out_file = Path(out_path) if out_path else PROC_DIR / f"{slug}_hourly.csv"

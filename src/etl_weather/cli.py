@@ -1,9 +1,11 @@
 import typer
+from typing import List
 from .config import settings
 from .fetch import run as fetch_run
 from .transform import run as transform_run
 from .transform import run_hourly as transform_hourly_run
 from .report import run as report_run
+from .compare import run as compare_run
 
 app = typer.Typer(help="ETL Cuaca & Kualitas Udara")
 
@@ -134,3 +136,20 @@ def all(
 
 if __name__ == "__main__":
     app()
+
+
+@app.command()
+def compare(
+    cities: List[str] = typer.Argument(
+        ..., help="Daftar kota minimal 2, mis: Bandung Jakarta"
+    ),
+    output: str = typer.Option(None, help="Path HTML output (opsional)"),
+) -> None:
+    """Buat laporan perbandingan untuk beberapa kota (min 2)."""
+    try:
+        if len(cities) < 2:
+            _fail("Harus minimal 2 kota.")
+        out = compare_run(cities, output=output)
+        typer.echo(f"Laporan perbandingan -> {out}")
+    except Exception as e:
+        _fail(f"Gagal membuat perbandingan: {e}")
