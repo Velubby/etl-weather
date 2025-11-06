@@ -177,7 +177,7 @@ def main() -> None:
 
     uvicorn.run(
         "etl_weather.web:app",
-        host="0.0.0.0",
+        host="localhost",
         port=8000,
         reload=False,
         log_level="info",
