@@ -5,10 +5,30 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-from jinja2 import Environment, FileSystemLoader, select_autoescape, Template
+
+# jinja2 is an optional dependency for rendering full reports. Import
+# defensively so unit tests that only exercise small helper functions
+# don't require jinja2 to be installed.
+try:
+    from jinja2 import Environment, FileSystemLoader, select_autoescape, Template
+    HAS_JINJA = True
+except Exception:  # pragma: no cover - optional runtime dependency
+    HAS_JINJA = False
+
+    class Template:  # very small fallback template implementation
+        def __init__(self, s: str):
+            self._s = s
+
+        def render(self, **kwargs):
+            # Minimal HTML fallback showing key info; not a full template engine.
+            city = kwargs.get("city", "")
+            start = kwargs.get("start", "")
+            end = kwargs.get("end", "")
+            return f"<html><body><h1>Laporan {city}</h1><p>Periode: {start} s/d {end}</p></body></html>"
 
 from .utils import slugify
-from .viz import build_charts, charts_to_html
+# viz (Altair) is optional at import time for unit tests that only exercise
+# logic helpers; import it lazily inside run().
 
 LOG = logging.getLogger(__name__)
 
@@ -129,7 +149,15 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
         except Exception:
             sunset_latest = None
 
-    # Grafik (Altair)
+    # Grafik (Altair) - import lazily because altair may not be installed in
+    # lightweight test environments.
+    try:
+        from .viz import build_charts, charts_to_html
+    except Exception as e:  # pragma: no cover - optional visualization deps
+        LOG.debug("Altair/viz not available: %s", e)
+        build_charts = lambda csv_path: []
+        charts_to_html = lambda charts: ""
+
     charts = list(build_charts(csv))
     charts_html = charts_to_html(charts)
 

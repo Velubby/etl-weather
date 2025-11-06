@@ -47,6 +47,55 @@ function windDirInfo(deg){
   return { arrow: arrows[idx], label: dirs[idx] };
 }
 
+// Fun fact fetching
+async function fetchFunFact(city) {
+  try {
+    // add a timeout in case the backend is slow
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(`/city-funfact?city=${encodeURIComponent(city)}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!response.ok) throw new Error('Failed to fetch fun fact');
+    const data = await response.json();
+    if (data.error) return { text: `Error: ${data.error}`, source: 'error', cached: false };
+    // server returns structured payload
+    const txt = data.city_funfact || data.fun_fact || 'No funfact available.';
+    return { text: txt, source: data.source || 'unknown', cached: !!data.cached };
+  } catch (error) {
+    console.error('Error fetching fun fact:', error);
+    return { text: 'Could not load fun fact at this time.', source: 'error', cached: false };
+  }
+}
+
+// Update fun fact in the UI
+async function updateFunFact(city) {
+  const container = el('#fun-fact-container');
+  const textEl = el('#fun-fact-text');
+  const refreshBtn = el('#btn-refresh-funfact');
+  container.classList.remove('hidden');
+  textEl.textContent = 'Loading...';
+
+  // populate click handler for refresh button (if present)
+  if (refreshBtn) {
+    // remove previous listener safely by cloning
+    const newBtn = refreshBtn.cloneNode(true);
+    refreshBtn.parentNode.replaceChild(newBtn, refreshBtn);
+    newBtn.addEventListener('click', () => updateFunFact(city));
+  }
+
+  const res = await fetchFunFact(city);
+  if (typeof res === 'string') {
+    textEl.textContent = res;
+    const srcEl = el('#fun-fact-source'); if (srcEl) srcEl.textContent = '';
+  } else if (res && res.text) {
+    textEl.textContent = res.text;
+    const srcEl = el('#fun-fact-source'); if (srcEl) srcEl.textContent = res.source ? `(${res.source}${res.cached? ' · from cache':''})` : '';
+  } else {
+    textEl.textContent = 'Could not load fun fact';
+    const srcEl = el('#fun-fact-source'); if (srcEl) srcEl.textContent = '';
+  }
+}
+
 // Debounce helper and keyboard navigation state for interactive search
 function debounce(fn, wait = 300){ let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); }; }
 let resultsIndex = -1;
@@ -236,6 +285,7 @@ async function doSearch() {
         selectedCity = it.name;
         selectedCityEl.textContent = selectedCity;
         actionsEl.classList.remove('hidden');
+        updateFunFact(selectedCity);
         // close dropdown on select
         resultsEl.classList.remove('open');
         resultsEl.innerHTML = '';

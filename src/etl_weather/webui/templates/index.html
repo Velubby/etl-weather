@@ -46,6 +46,14 @@
         <button id="btn-daily">Load Daily</button>
         <button id="btn-hourly">Load Hourly</button>
       </div>
+      <div id="fun-fact-container" class="hidden">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong>City Funfact:</strong>
+          <span id="fun-fact-source" class="muted" style="font-size:0.9em">(source)</span>
+          <button id="btn-refresh-funfact" title="Refresh fun fact">⟳</button>
+        </div>
+        <p id="fun-fact-text">Loading...</p>
+      </div>
     </section>
 
     <section id="today" class="hidden panel">
