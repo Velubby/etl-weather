@@ -187,6 +187,29 @@ function renderDailyCards(rows){
   }
 }
 
+// Reset/hide views when city changes to avoid stale content
+function resetViewsOnCityChange(){
+  // Hide Daily and clear content
+  const daily = el('#daily');
+  if (daily) {
+    daily.classList.add('hidden');
+    const ds = el('#daily-summary'); if (ds) ds.textContent = '';
+    const dc = el('#daily-cards'); if (dc) dc.innerHTML = '';
+    const charts = ['#daily-chart-temp','#daily-chart-rain','#daily-chart-pm25','#daily-chart-feels','#daily-chart-dew'];
+    charts.forEach(id => { const c = el(id); if (c) c.innerHTML = ''; });
+  }
+  // Hide Hourly and clear list
+  const hourly = el('#hourly');
+  if (hourly) {
+    hourly.classList.add('hidden');
+    const hl = el('#hourly-list'); if (hl) hl.innerHTML = '';
+  }
+  // Hide and clear Today mini strip; hero/details will be reloaded
+  const mini = el('#today-mini');
+  if (mini){ mini.innerHTML = ''; mini.classList.add('hidden'); }
+  lastHourlyRows = null;
+}
+
 function renderHourlyList(rows){
   const container = el('#hourly-list');
   container.innerHTML = '';
@@ -242,6 +265,8 @@ async function doSearch() {
         // close dropdown on select
         resultsEl.classList.remove('open');
         resultsEl.innerHTML = '';
+        // reset/hide other panels and mini strip
+        resetViewsOnCityChange();
         // auto-load Today view and scroll into view
         loadToday();
         const today = document.querySelector('#today');
