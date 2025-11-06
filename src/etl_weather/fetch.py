@@ -49,7 +49,7 @@ def _fetch_weather_air(
     weather_params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "temperature_2m,precipitation",
+        "hourly": "temperature_2m,precipitation,relative_humidity_2m,windspeed_10m,apparent_temperature,weathercode,dew_point_2m,winddirection_10m",
         "forecast_days": days,
         "timezone": timezone,
     }

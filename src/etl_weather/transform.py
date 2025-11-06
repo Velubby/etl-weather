@@ -115,3 +115,82 @@ def run(city: str, out_path: Optional[str] = None) -> str:
     LOG.info("Saved daily aggregates -> %s", out_file)
 
     return str(out_file)
+
+
+def run_hourly(city: str, out_path: Optional[str] = None) -> str:
+    """Transform raw hourly JSON into a normalized hourly CSV.
+    Produces columns: time, date, temp, rain, pm25, pm10 and, when available,
+    rh (humidity), wind (km/h), feels_like, wcode (weather code), dew_point, wind_dir.
+    Missing fields will be left as empty values.
+    """
+    slug = slugify(city)
+    weather_path = RAW_DIR / f"{slug}_weather.json"
+    air_path = RAW_DIR / f"{slug}_air.json"
+
+    if not weather_path.exists() or not air_path.exists():
+        raise FileNotFoundError(
+            f"File raw belum tersedia untuk '{city}'. Jalankan dulu: etl-weather fetch --city \"{city}\""
+        )
+
+    weather = json.loads(weather_path.read_text(encoding="utf-8"))
+    air = json.loads(air_path.read_text(encoding="utf-8"))
+
+    # include optional weather fields if present; _safe_hourly_frame will pad when missing
+    hw = _safe_hourly_frame(
+        weather.get("hourly", {}),
+        [
+            "temperature_2m",
+            "precipitation",
+            "relative_humidity_2m",
+            "windspeed_10m",
+            "apparent_temperature",
+            "weathercode",
+            "dew_point_2m",
+            "winddirection_10m",
+        ],
+    )
+    ha = _safe_hourly_frame(air.get("hourly", {}), ["pm2_5", "pm10"])
+
+    # Rename to concise, UI-friendly names
+    hw = hw.rename(
+        columns={
+            "temperature_2m": "temp",
+            "precipitation": "rain",
+            "relative_humidity_2m": "rh",
+            "windspeed_10m": "wind",
+            "apparent_temperature": "feels_like",
+            "weathercode": "wcode",
+            "dew_point_2m": "dew_point",
+            "winddirection_10m": "wind_dir",
+        }
+    )
+    ha = ha.rename(columns={"pm2_5": "pm25", "pm10": "pm10"})
+
+    df = pd.merge(hw, ha, on="time", how="outer").sort_values("time", ignore_index=True)
+
+    # Coerce numerics where applicable
+    for col in [
+        "temp",
+        "rain",
+        "pm25",
+        "pm10",
+        "rh",
+        "wind",
+        "feels_like",
+        "dew_point",
+        "wind_dir",
+    ]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Time parsing and date extraction
+    df["time"] = pd.to_datetime(df["time"], errors="coerce")
+    df["date"] = df["time"].dt.date
+    df = df.dropna(subset=["time"])  # drop rows without valid timestamp
+
+    # Save
+    out_file = Path(out_path) if out_path else PROC_DIR / f"{slug}_hourly.csv"
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_file, index=False)
+    LOG.info("Saved hourly data -> %s", out_file)
+    return str(out_file)
