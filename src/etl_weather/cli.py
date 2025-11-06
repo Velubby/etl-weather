@@ -1,8 +1,11 @@
 import typer
+from typing import List
 from .config import settings
 from .fetch import run as fetch_run
 from .transform import run as transform_run
+from .transform import run_hourly as transform_hourly_run
 from .report import run as report_run
+from .compare import run as compare_run
 
 app = typer.Typer(help="ETL Cuaca & Kualitas Udara")
 
@@ -64,6 +67,22 @@ def transform(
 
 
 @app.command()
+def transform_hourly(
+    city: str = typer.Option(
+        None, help="Nama kota; gunakan yang sama dengan saat fetch"
+    ),
+    output: str = typer.Option(None, help="Path output CSV hourly (opsional)"),
+) -> None:
+    """Bangun CSV hourly (gabungan cuaca & kualitas udara)."""
+    try:
+        c = city or settings.city
+        out = transform_hourly_run(c, out_path=output)
+        typer.echo(f"Berhasil transform hourly -> {out}")
+    except Exception as e:
+        _fail(f"Gagal transform hourly: {e}")
+
+
+@app.command()
 def report(
     city: str = typer.Option(None, help="Nama kota (default dari .env atau config)"),
     input: str = typer.Option(None, help="Path CSV (opsional, override)"),
@@ -103,6 +122,12 @@ def all(
             fallback=not no_fallback,
         )
         transform_run(c)
+        # Selain agregat harian, secara default juga hasilkan hourly untuk keperluan web
+        try:
+            transform_hourly_run(c)
+        except Exception:
+            # Jangan gagal keseluruhan bila hourly bermasalah; tetap lanjut laporan harian
+            pass
         out = report_run(c, output=output)
         typer.echo(f"Selesai. Laporan: {out}")
     except Exception as e:
@@ -111,3 +136,20 @@ def all(
 
 if __name__ == "__main__":
     app()
+
+
+@app.command()
+def compare(
+    cities: List[str] = typer.Argument(
+        ..., help="Daftar kota minimal 2, mis: Bandung Jakarta"
+    ),
+    output: str = typer.Option(None, help="Path HTML output (opsional)"),
+) -> None:
+    """Buat laporan perbandingan untuk beberapa kota (min 2)."""
+    try:
+        if len(cities) < 2:
+            _fail("Harus minimal 2 kota.")
+        out = compare_run(cities, output=output)
+        typer.echo(f"Laporan perbandingan -> {out}")
+    except Exception as e:
+        _fail(f"Gagal membuat perbandingan: {e}")

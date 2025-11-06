@@ -14,11 +14,14 @@ dependencies = [
   "altair>=5.0",
   "jinja2>=3.1",
   "pydantic>=2.7",
-  "pydantic-settings>=2.3"
+  "pydantic-settings>=2.3",
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.23"
 ]
 
 [project.scripts]
 etl-weather = "etl_weather.cli:app"
+etl-weather-web = "etl_weather.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
