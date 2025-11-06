@@ -49,11 +49,7 @@ def _fetch_weather_air(
     weather_params = {
         "latitude": lat,
         "longitude": lon,
-        # Tambahkan variabel hourly tambahan untuk fitur lebih kaya
-        # Catatan: variabel ini valid di Open-Meteo hourly API
-        "hourly": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m",
-        # Ambil juga ringkasan harian untuk keperluan laporan/web di masa depan
-        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,sunrise,sunset",
+        "hourly": "temperature_2m,precipitation",
         "forecast_days": days,
         "timezone": timezone,
     }
