@@ -6,7 +6,7 @@ const selectedCityEl = el('#selected-city');
 let selectedCity = null;
 let lastHourlyRows = null; // reserved for future use
 
-// favorites removed for a simpler UI
+// Simple DOM helpers and UI state
 
 const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
 const dtFmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
@@ -56,6 +56,20 @@ function updateActiveResult(){
   items.forEach((li, i) => li.classList.toggle('active', i === resultsIndex));
   if (resultsIndex >= 0 && items[resultsIndex]){
     items[resultsIndex].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+async function fetchCityFunFact(city) {
+  try {
+    const response = await fetch(`/city/funfact/${encodeURIComponent(city)}?fresh=1&t=${Date.now()}`);
+    if (!response.ok) throw new Error('Failed to fetch fun fact');
+    const data = await response.json();
+    el('#city-funfact').classList.remove('hidden');
+    el('#funfact-text').textContent = data.fun_fact;
+  } catch (err) {
+    console.error('Error fetching fun fact:', err);
+    el('#city-funfact').classList.add('hidden');
+    el('#funfact-text').textContent = '-';
   }
 }
 
@@ -133,29 +147,7 @@ function badgeClassForPm25(v){
   return 'badge bad';
 }
 
-function renderList(container, rows, cols) {
-  container.innerHTML = '';
-  const thead = document.createElement('thead');
-  const trh = document.createElement('tr');
-  cols.forEach((c) => {
-    const th = document.createElement('th');
-    th.textContent = c;
-    trh.appendChild(th);
-  });
-  thead.appendChild(trh);
-  const tbody = document.createElement('tbody');
-  rows.forEach((r) => {
-    const tr = document.createElement('tr');
-    cols.forEach((c) => {
-      const td = document.createElement('td');
-      td.textContent = r[c] ?? '';
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  container.appendChild(thead);
-  container.appendChild(tbody);
-}
+// removed legacy table renderer (now using cards/charts for presentation)
 
 function renderDailyCards(rows){
   const container = el('#daily-cards');
@@ -261,6 +253,7 @@ async function doSearch() {
       li.addEventListener('click', () => {
         selectedCity = it.name;
         selectedCityEl.textContent = selectedCity;
+        fetchCityFunFact(selectedCity);
         actionsEl.classList.remove('hidden');
         // close dropdown on select
         resultsEl.classList.remove('open');
@@ -411,13 +404,13 @@ async function loadDaily() {
     await vegaEmbed('#daily-chart-feels', dailyFeelsSpec(rows), { actions: false });
     await vegaEmbed('#daily-chart-dew', dailyDewSpec(rows), { actions: false });
   } catch (e) {
-    console.warn('Chart render failed', e);
+    // quietly skip chart rendering errors in production UI
   }
 
   // friendly cards
   renderDailyCards(rows);
 
-  // raw table removed for a simpler UI
+  // raw table intentionally omitted to keep UI focused
 }
 
 async function loadToday(){
@@ -547,7 +540,7 @@ async function doCompare() {
     await vegaEmbed('#compare-chart-temp', tempSpec, { actions: false });
     await vegaEmbed('#compare-chart-pm25', pmSpec, { actions: false });
   } catch (e) {
-    console.warn('Compare chart render failed', e);
+    // quietly skip chart rendering errors in production UI
   }
   // summary pills per city
   const byCity = new Map();
@@ -569,7 +562,7 @@ async function doCompare() {
     pillsEl.appendChild(pill);
   }
 
-  // raw compare table removed for a simpler UI
+  // raw compare table intentionally omitted to keep UI focused
 }
 
 el('#btn-search').addEventListener('click', doSearch);
@@ -614,4 +607,4 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// favorites removed
+// end of app.js

@@ -16,7 +16,9 @@ dependencies = [
   "pydantic>=2.7",
   "pydantic-settings>=2.3",
   "fastapi>=0.110",
-  "uvicorn[standard]>=0.23"
+  "uvicorn[standard]>=0.23",
+  "aiofiles>=23.0",
+  "python-dotenv>=1.0"
 ]
 
 [project.scripts]
@@ -25,3 +27,16 @@ etl-weather-web = "etl_weather.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.optional-dependencies]
+ai = [
+  "google-generativeai>=0.7"
+]
+
+dev = [
+  "pytest>=7.4",
+  "pytest-cov>=4.1",
+  "ruff>=0.6",
+  "black>=24.8",
+  "pre-commit>=3.7"
+]

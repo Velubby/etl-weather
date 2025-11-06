@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import List
 
 import pandas as pd
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Request
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Query, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -15,6 +17,9 @@ from .config import settings
 from . import fetch as fetch_mod
 from . import transform as transform_mod
 from .utils import slugify
+
+# Load environment variables from .env file (keep imports at top for linting)
+load_dotenv()
 
 
 def _load_csv(path: Path) -> pd.DataFrame:
@@ -70,11 +75,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-WEB_DIR = Path(__file__).parent / "webui"
+
+# Prefer the source tree during development; fall back to package path when installed.
+def _resolve_webui_dir() -> Path:
+    # 1) Explicit override via env var
+    env_dir = os.getenv("ETL_WEATHER_WEBUI_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        if p.exists():
+            return p
+    # 2) Source tree: <repo>/src/etl_weather/webui
+    here = Path(__file__).resolve()
+    src_candidate = here.parents[2] / "src" / "etl_weather" / "webui"
+    if src_candidate.exists():
+        return src_candidate
+    # 3) Package-installed path: <site-packages>/etl_weather/webui
+    pkg_candidate = here.parent / "webui"
+    return pkg_candidate
+
+
+WEB_DIR = _resolve_webui_dir()
+if not WEB_DIR.exists():
+    raise RuntimeError(
+        f"Web UI directory not found: {WEB_DIR}. Set ETL_WEATHER_WEBUI_DIR to the 'webui' folder "
+        "or install in editable mode (pip install -e .) so static files are available."
+    )
 TEMPLATES_DIR = WEB_DIR / "templates"
 STATIC_DIR = WEB_DIR / "static"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/city/funfact/{city}")
+async def get_city_funfact(
+    city: str,
+    background_tasks: BackgroundTasks,
+    fresh: bool = Query(
+        False, description="Paksa minta varian baru (bisa lebih lambat)"
+    ),
+    fast: bool = Query(
+        False,
+        description="Cepat: jika ada cache, balas segera dan refresh di background",
+    ),
+) -> dict:
+    from .utils import get_city_fun_fact, get_cached_city_fun_fact
+
+    try:
+        # Fast mode: return cached instantly if available, and refresh in background
+        if fast:
+            cached = get_cached_city_fun_fact(city)
+            if cached:
+                background_tasks.add_task(get_city_fun_fact, city, True)
+                return {"city": city, "fun_fact": cached, "source": "cache-fast"}
+        # Normal path: generate (may be slower), respecting 'fresh'
+        fun_fact = get_city_fun_fact(city, fresh=fresh)
+        return {"city": city, "fun_fact": fun_fact, "source": "gemini"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -85,6 +142,83 @@ async def home(request: Request) -> HTMLResponse:
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/ai/status")
+async def ai_status() -> dict:
+    """Diagnostic endpoint: checks Gemini env/model availability without exposing secrets."""
+    import os
+
+    try:
+        import google.generativeai as genai  # type: ignore
+
+        sdk_ok = True
+    except Exception:
+        genai = None
+        sdk_ok = False
+
+    api_key_present = bool(os.getenv("GEMINI_API_KEY"))
+    model_env = os.getenv("GEMINI_MODEL") or "(unset)"
+
+    gen_ok = False
+    err = None
+    if api_key_present and sdk_ok and genai is not None and model_env != "(unset)":
+        try:
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            # Try candidates from env (comma-separated allowed) and add 'models/' variants
+            env_list = [s.strip() for s in model_env.split(",") if s.strip()]
+            priority = ["gemini-2.5-flash", "gemini-2.5-pro"]
+            base = env_list + priority
+            expanded = []
+            for name in base:
+                if name.startswith("models/"):
+                    expanded.append(name)
+                    expanded.append(name.replace("models/", "", 1))
+                else:
+                    expanded.append(name)
+                    expanded.append("models/" + name)
+            # dedupe
+            seen = set()
+            candidates = [x for x in expanded if not (x in seen or seen.add(x))]
+            r = None
+            last_err = None
+            if hasattr(genai, "GenerativeModel"):
+                for cand in candidates:
+                    try:
+                        m = genai.GenerativeModel(model_name=cand)
+                        r = m.generate_content(
+                            "Tes status AI singkat.",
+                            generation_config={
+                                "temperature": 0.2,
+                                "max_output_tokens": 8,
+                            },
+                        )
+                        gen_ok = True if r else False
+                        model_env = cand
+                        break
+                    except Exception as e:
+                        last_err = f"{e.__class__.__name__}: {str(e)[:180]}"
+            if not gen_ok and hasattr(genai, "generate_text"):
+                for cand in candidates:
+                    try:
+                        r = genai.generate_text(model=cand, prompt="Tes.")
+                        gen_ok = True if r else False
+                        model_env = cand
+                        break
+                    except Exception as e:
+                        last_err = f"{e.__class__.__name__}: {str(e)[:180]}"
+            if not gen_ok:
+                err = last_err
+        except Exception as e:
+            err = f"{e.__class__.__name__}: {str(e)[:180]}"
+
+    return {
+        "sdk": sdk_ok,
+        "api_key": api_key_present,
+        "model": model_env,
+        "generate_ok": gen_ok,
+        "error": err,
+    }
 
 
 @app.get("/search")
@@ -174,6 +308,13 @@ async def compare(
 def main() -> None:
     # Run uvicorn programmatically for convenience: `etl-weather-web`
     import uvicorn
+    import logging
+
+    # General logging setup (let Uvicorn handle its own loggers)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
 
     uvicorn.run(
         "etl_weather.web:app",
