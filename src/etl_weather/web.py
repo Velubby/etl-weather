@@ -34,10 +34,16 @@ async def _geocode_search(
 ) -> list[dict]:
     url = "https://geocoding-api.open-meteo.com/v1/search"
     params = {"name": query, "count": count, "language": language, "format": "json"}
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(url, params=params)
-        r.raise_for_status()
-        j = r.json()
+    # Be resilient to occasional network hiccups/timeouts; keep UI responsive by returning [] on failure
+    try:
+        timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(url, params=params)
+            r.raise_for_status()
+            j = r.json()
+    except httpx.HTTPError:
+        # On network errors or non-2xx, fail soft with empty results so the endpoint stays 200
+        j = {"results": []}
     results = j.get("results") or []
     out = []
     for res in results:

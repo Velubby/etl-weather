@@ -4,6 +4,7 @@ const actionsEl = el('#actions');
 const selectedCityEl = el('#selected-city');
 
 let selectedCity = null;
+let lastHourlyRows = null; // reserved for future use
 
 // favorites removed for a simpler UI
 
@@ -196,15 +197,17 @@ function renderHourlyList(rows){
     const timeStr = t ? shortHour(t) : '-';
     const code = r.wcode ?? r.weather_code;
     const icon = weatherIcon(code);
-    const row = document.createElement('div');
-    row.className = 'hourly-row line';
-    const rainVal = r.rain ?? r.precip ?? r.precipitation; // optional rain
-    const windDeg = r.wind_dir ?? r.wind_direction ?? r.wind_deg;
-    const windInfo = windDirInfo(windDeg);
-    const tempVal = fmt.format(r.temp ?? r.feels_like ?? NaN);
-  const humCol = r.rh!=null ? `<div class="col humidity with-icon">${uiIcon('humidity', 18)}<span>${fmt.format(r.rh)}%</span></div>` : `<div class="col humidity muted">-</div>`;
-    const rainCol = rainVal!=null ? `<div class="col rain with-icon">${uiIcon('rain', 18)}<span>${fmt.format(rainVal)} mm</span></div>` : `<div class="col rain muted">-</div>`;
-    const windCol = r.wind!=null ? `<div class="col wind"><span class="arrow">${windInfo.arrow}</span> <span>${windInfo.label? windInfo.label + ' ' : ''}${fmt.format(r.wind)} km/h</span></div>` : `<div class="col wind muted">-</div>`;
+      const row = document.createElement('div');
+      row.className = 'hourly-row line';
+      const rainValMm = r.rain ?? r.precip ?? r.precipitation; // optional rain (mm)
+      const windDeg = r.wind_dir ?? r.wind_direction ?? r.wind_deg;
+      const windInfo = windDirInfo(windDeg);
+      const tempVal = fmt.format(r.temp ?? r.feels_like ?? NaN);
+      const humCol = r.rh!=null ? `<div class="col humidity with-icon" title="Relative humidity (%)">${uiIcon('humidity', 18)}<span>${fmt.format(r.rh)}%</span></div>` : `<div class="col humidity muted" title="Relative humidity (%)">-</div>`;
+      const rainText = (rainValMm!=null ? `${fmt.format(rainValMm)} mm` : null);
+      const rainTitle = 'Precipitation (mm)';
+      const rainCol = rainText!=null ? `<div class="col rain with-icon" title="${rainTitle}">${uiIcon('rain', 18)}<span>${rainText}</span></div>` : `<div class="col rain muted" title="${rainTitle}">-</div>`;
+      const windCol = r.wind!=null ? `<div class="col wind" title="Wind speed (km/h)"><span class="arrow">${windInfo.arrow}</span> <span>${windInfo.label? windInfo.label + ' ' : ''}${fmt.format(r.wind)} km/h</span></div>` : `<div class="col wind muted" title="Wind speed (km/h)">-</div>`;
     row.innerHTML = `
       <div class="col time">${timeStr}</div>
       <div class="col temp">${tempVal}°</div>
@@ -451,6 +454,23 @@ async function loadToday(){
   if (cur?.dew_point!=null) tiles.push({label:`${uiIcon('dew',18)} Dew Point`, value:`${fmt.format(cur.dew_point)}°`});
 
     details.innerHTML = tiles.map(t=>`<div class="tile"><div class="muted">${t.label}</div><div><strong>${t.value}</strong></div></div>`).join('');
+
+    // Mini next-hours strip (next 6)
+    const mini = el('#today-mini');
+    if (mini){
+      const nowTs = Date.now();
+      const next = (hours||[]).filter(r => r.time && new Date(r.time).getTime() >= nowTs).slice(0,6);
+      mini.innerHTML = next.map(r => {
+        const t = r.time ? shortHour(new Date(r.time)) : '-';
+        const w = weatherIcon(r.wcode ?? r.weather_code);
+        const tv = r.temp ?? r.feels_like;
+        const rainMm = r.rain ?? r.precip ?? r.precipitation;
+        const txt = (rainMm!=null? `${fmt.format(rainMm)}mm` : '-');
+        const title = 'Precipitation (mm)';
+        return `<div class="mini-item" title="${title}"><div class="t">${t}</div><div class="w">${w}</div><div class="v">${fmt.format(tv)}°</div><div class="r with-icon">${uiIcon('rain',16)}<span>${txt}</span></div></div>`;
+      }).join('');
+      mini.classList.toggle('hidden', next.length === 0);
+    }
   }catch(e){
     hero.innerHTML = 'Failed to load today.';
   }
@@ -462,6 +482,7 @@ async function loadHourly() {
   const res = await fetch(`/data/hourly?city=${encodeURIComponent(selectedCity)}&refresh=true`);
   const data = await res.json();
   const rows = data.data || [];
+  lastHourlyRows = rows;
   renderHourlyList(rows);
 }
 
