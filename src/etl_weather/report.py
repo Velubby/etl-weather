@@ -5,30 +5,10 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-
-# jinja2 is an optional dependency for rendering full reports. Import
-# defensively so unit tests that only exercise small helper functions
-# don't require jinja2 to be installed.
-try:
-    from jinja2 import Environment, FileSystemLoader, select_autoescape, Template
-    HAS_JINJA = True
-except Exception:  # pragma: no cover - optional runtime dependency
-    HAS_JINJA = False
-
-    class Template:  # very small fallback template implementation
-        def __init__(self, s: str):
-            self._s = s
-
-        def render(self, **kwargs):
-            # Minimal HTML fallback showing key info; not a full template engine.
-            city = kwargs.get("city", "")
-            start = kwargs.get("start", "")
-            end = kwargs.get("end", "")
-            return f"<html><body><h1>Laporan {city}</h1><p>Periode: {start} s/d {end}</p></body></html>"
+from jinja2 import Environment, FileSystemLoader, select_autoescape, Template
 
 from .utils import slugify
-# viz (Altair) is optional at import time for unit tests that only exercise
-# logic helpers; import it lazily inside run().
+from .viz import build_charts, charts_to_html
 
 LOG = logging.getLogger(__name__)
 
@@ -122,42 +102,10 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
         float(df.loc[wettest_idx, "total_rain"]) if wettest_idx is not None else 0.0
     )
     pm25_avg = float(df["pm25_avg"].mean()) if "pm25_avg" in df.columns else None
-    feels_like_avg = (
-        float(df["feels_like_avg"].mean())
-        if "feels_like_avg" in df.columns and not df["feels_like_avg"].isna().all()
-        else None
-    )
-    dew_point_avg = (
-        float(df["dew_point_avg"].mean())
-        if "dew_point_avg" in df.columns and not df["dew_point_avg"].isna().all()
-        else None
-    )
     rainy_days = int((df["total_rain"] > 0).sum()) if "total_rain" in df.columns else 0
     pm25_cat = _pm25_category(pm25_avg if pm25_avg is not None else float("nan"))
 
-    # Sunrise/Sunset ringkas (opsional bila tersedia)
-    sunrise_earliest = None
-    sunset_latest = None
-    if "sunrise" in df.columns and not df["sunrise"].isna().all():
-        try:
-            sunrise_earliest = pd.to_datetime(df["sunrise"], errors="coerce").min()
-        except Exception:
-            sunrise_earliest = None
-    if "sunset" in df.columns and not df["sunset"].isna().all():
-        try:
-            sunset_latest = pd.to_datetime(df["sunset"], errors="coerce").max()
-        except Exception:
-            sunset_latest = None
-
-    # Grafik (Altair) - import lazily because altair may not be installed in
-    # lightweight test environments.
-    try:
-        from .viz import build_charts, charts_to_html
-    except Exception as e:  # pragma: no cover - optional visualization deps
-        LOG.debug("Altair/viz not available: %s", e)
-        build_charts = lambda csv_path: []
-        charts_to_html = lambda charts: ""
-
+    # Grafik (Altair)
     charts = list(build_charts(csv))
     charts_html = charts_to_html(charts)
 
@@ -187,29 +135,6 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
             rainy_days=rainy_days,
             charts=charts_html,
             recommendation=recommendation,
-            sunrise_earliest=(
-                sunrise_earliest.strftime("%H:%M")
-                if sunrise_earliest is not None
-                else "-"
-            ),
-            sunset_latest=(
-                sunset_latest.strftime("%H:%M") if sunset_latest is not None else "-"
-            ),
-            feels_like_avg=(
-                f"{feels_like_avg:.1f}" if feels_like_avg is not None else "-"
-            ),
-            dew_point_avg=(
-                f"{dew_point_avg:.1f}" if dew_point_avg is not None else "-"
-            ),
-            hot_days=int(df["is_hot_day"].sum()) if "is_hot_day" in df.columns else 0,
-            heavy_rain_days=(
-                int(df["is_heavy_rain"].sum()) if "is_heavy_rain" in df.columns else 0
-            ),
-            unhealthy_pm25_days=(
-                int(df["is_unhealthy_pm25"].sum())
-                if "is_unhealthy_pm25" in df.columns
-                else 0
-            ),
         )
     else:
         # Fallback template minimal
@@ -223,10 +148,6 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
   <li>Hari paling basah: {{ wettest_date }} ({{ wettest_rain }} mm)</li>
   <li>Rata-rata PM2.5: {{ pm25_avg }} ({{ pm25_category }})</li>
   <li>Jumlah hari hujan: {{ rainy_days }}</li>
-  <li>Rentang waktu terbit/terbenam (periode): {{ sunrise_earliest }} / {{ sunset_latest }}</li>
-  <li>Rata-rata feels-like: {{ feels_like_avg }} °C</li>
-  <li>Rata-rata dew point: {{ dew_point_avg }} °C</li>
-    <li>Ringkasan alerts: panas={{ hot_days }}, hujan_berat={{ heavy_rain_days }}, pm25_tidak_sehat={{ unhealthy_pm25_days }}</li>
 </ul>
 <h2>Grafik</h2>
 {% for c in charts %} {{ c | safe }} {% endfor %}
@@ -246,20 +167,6 @@ def run(city: str, output: Optional[str] = None, csv_path: Optional[str] = None)
             rainy_days=rainy_days,
             charts=charts_html,
             recommendation=recommendation,
-            sunrise_earliest=(
-                sunrise_earliest.strftime("%H:%M")
-                if sunrise_earliest is not None
-                else "-"
-            ),
-            sunset_latest=(
-                sunset_latest.strftime("%H:%M") if sunset_latest is not None else "-"
-            ),
-            feels_like_avg=(
-                f"{feels_like_avg:.1f}" if feels_like_avg is not None else "-"
-            ),
-            dew_point_avg=(
-                f"{dew_point_avg:.1f}" if dew_point_avg is not None else "-"
-            ),
         )
 
     # Simpan file
