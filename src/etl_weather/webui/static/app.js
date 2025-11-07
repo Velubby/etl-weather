@@ -59,17 +59,33 @@ function updateActiveResult(){
   }
 }
 
-async function fetchCityFunFact(city) {
+async function fetchCityFunFact(city, opts = {}) {
+  const { fast = true, fresh = false } = opts;
+  const loadingEl = el('#funfact-loading');
+  const refreshBtn = el('#btn-funfact-refresh');
   try {
-    const response = await fetch(`/city/funfact/${encodeURIComponent(city)}?fresh=1&t=${Date.now()}`);
+    if (loadingEl) loadingEl.style.display = 'inline';
+    if (refreshBtn) refreshBtn.disabled = true;
+    const params = new URLSearchParams();
+    if (fresh) params.set('fresh', '1');
+    else if (fast) params.set('fast', '1');
+    params.set('t', String(Date.now()));
+    const response = await fetch(`/city/funfact/${encodeURIComponent(city)}?${params.toString()}`);
     if (!response.ok) throw new Error('Failed to fetch fun fact');
     const data = await response.json();
     el('#city-funfact').classList.remove('hidden');
-    el('#funfact-text').textContent = data.fun_fact;
+    el('#funfact-text').textContent = data.fun_fact || '-';
   } catch (err) {
     console.error('Error fetching fun fact:', err);
-    el('#city-funfact').classList.add('hidden');
-    el('#funfact-text').textContent = '-';
+    // keep previous text if any; just show container hidden if none
+    const cur = el('#funfact-text')?.textContent || '';
+    if (!cur) {
+      el('#city-funfact').classList.add('hidden');
+      el('#funfact-text').textContent = '-';
+    }
+  } finally {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (refreshBtn) refreshBtn.disabled = false;
   }
 }
 
@@ -253,7 +269,8 @@ async function doSearch() {
       li.addEventListener('click', () => {
         selectedCity = it.name;
         selectedCityEl.textContent = selectedCity;
-        fetchCityFunFact(selectedCity);
+        // default to fast mode for immediate UX
+        fetchCityFunFact(selectedCity, { fast: true, fresh: false });
         actionsEl.classList.remove('hidden');
         // close dropdown on select
         resultsEl.classList.remove('open');
@@ -571,6 +588,15 @@ if (btnToday) btnToday.addEventListener('click', loadToday);
 el('#btn-daily').addEventListener('click', loadDaily);
 el('#btn-hourly').addEventListener('click', loadHourly);
 el('#btn-compare').addEventListener('click', doCompare);
+
+// Fun fact: fresh variant button
+const btnFunfact = el('#btn-funfact-refresh');
+if (btnFunfact){
+  btnFunfact.addEventListener('click', () => {
+    if (!selectedCity) return alert('Select a city first');
+    fetchCityFunFact(selectedCity, { fresh: true });
+  });
+}
 
 // Interactive search: debounce + keyboard navigation
 const searchInput = el('#q');
