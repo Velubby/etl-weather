@@ -598,6 +598,34 @@ if (btnFunfact){
   });
 }
 
+// AI status: fetch /ai/status and update pill
+async function fetchAiStatus() {
+  const pill = el('#ai-status');
+  if (!pill) return;
+  try {
+    const res = await fetch('/ai/status?t=' + Date.now());
+    if (!res.ok) throw new Error('status non-ok');
+    const j = await res.json();
+    // decide class by generate_ok and api_key presence
+    const ok = j.generate_ok === true && (j.api_key_present === true || j.sdk_ok === true);
+    const warn = j.generate_ok === false && (j.api_key_present === true || j.sdk_ok === true);
+    const model = j.model_used || (Array.isArray(j.models) && j.models[0]) || 'unknown';
+    const text = `AI: ${model.split('/').pop()}`;
+    const dot = ok ? 'ok' : (warn ? 'warn' : 'bad');
+    pill.classList.remove('ok','warn','bad');
+    pill.classList.add(ok ? 'ok' : (warn ? 'warn' : 'bad'));
+    pill.innerHTML = `<span class="dot ${dot}"></span>${text}`;
+    pill.title = `AI status — model: ${model}\ngenerate_ok: ${j.generate_ok}\nsdk_ok: ${j.sdk_ok}\napi_key_present: ${j.api_key_present}${j.error?`\nerror: ${j.error}`:''}`;
+  } catch (e){
+    pill.classList.remove('ok','warn'); pill.classList.add('bad');
+    pill.innerHTML = `<span class="dot bad"></span>AI: unavailable`;
+    pill.title = `AI status unreachable`;
+  }
+}
+
+// initial fetch and periodic refresh
+try { fetchAiStatus(); setInterval(fetchAiStatus, 60 * 1000); } catch (e) {}
+
 // Interactive search: debounce + keyboard navigation
 const searchInput = el('#q');
 searchInput.addEventListener('keydown', (e) => {
