@@ -284,25 +284,111 @@ async def data_hourly(city: str, refresh: bool = False) -> dict:
 # Download endpoint removed for simplified user-facing UI
 
 
+async def fetch_city_data(city: str, days: int = 7, timezone: str = "auto") -> pd.DataFrame:
+    """Fetch and transform city data directly from API without saving locally."""
+    loc = await _geocode_search(city, count=1)
+    if not loc:
+        raise HTTPException(status_code=404, detail=f"Kota tidak ditemukan: {city}")
+    
+    city_info = loc[0]
+    lat, lon = city_info["lat"], city_info["lon"]
+    
+    # Fetch weather and air quality data
+    weather_params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "temperature_2m,precipitation,relative_humidity_2m,windspeed_10m",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+        "forecast_days": days,
+        "timezone": timezone,
+    }
+    air_params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "pm2_5,pm10",
+        "forecast_days": days,
+        "timezone": timezone,
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            weather_resp = await client.get("https://api.open-meteo.com/v1/forecast", params=weather_params)
+            air_resp = await client.get("https://air-quality-api.open-meteo.com/v1/air-quality", params=air_params)
+            
+            weather_resp.raise_for_status()
+            air_resp.raise_for_status()
+            
+            weather_data = weather_resp.json()
+            air_data = air_resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gagal mengambil data: {str(e)}")
+    
+    # Transform data to daily format
+    daily_weather = pd.DataFrame({
+        'date': pd.to_datetime(weather_data['daily']['time']),
+        'temp_min': weather_data['daily']['temperature_2m_min'],
+        'temp_max': weather_data['daily']['temperature_2m_max'],
+        'total_rain': weather_data['daily']['precipitation_sum']
+    })
+    
+    # Calculate daily averages for air quality
+    hourly_air = pd.DataFrame({
+        'time': pd.to_datetime(air_data['hourly']['time']),
+        'pm25': air_data['hourly']['pm2_5'],
+        'pm10': air_data['hourly']['pm10']
+    })
+    hourly_air['date'] = hourly_air['time'].dt.date
+    daily_air = hourly_air.groupby('date').agg({
+        'pm25': 'mean',
+        'pm10': 'mean'
+    }).reset_index()
+    daily_air['date'] = pd.to_datetime(daily_air['date'])
+    
+    # Merge weather and air quality data
+    daily_data = pd.merge(daily_weather, daily_air, on='date', how='left')
+    daily_data['city'] = city
+    
+    return daily_data
+
 @app.get("/compare")
 async def compare(
     cities: str = Query(..., description="Daftar kota dipisah koma"),
-    refresh: bool = False,
+    days: int = Query(7, description="Jumlah hari untuk perbandingan (1-16)", ge=1, le=16),
+    timezone: str = Query("auto", description="Zona waktu (default: auto)"),
 ) -> dict:
     city_list: List[str] = [c.strip() for c in cities.split(",") if c.strip()]
     if len(city_list) < 2:
         raise HTTPException(
             status_code=400, detail="Butuh minimal dua kota untuk perbandingan."
         )
-    frames: List[pd.DataFrame] = []
-    for c in city_list:
-        p = _ensure_daily(c, refresh)
-        df = _load_csv(p)
-        df["city"] = c
-        frames.append(df)
-    merged = pd.concat(frames, ignore_index=True)
-    records = merged.to_dict(orient="records")
-    return {"cities": city_list, "count": len(records), "data": records}
+    
+    # Fetch data for all cities concurrently
+    dfs = []
+    for city in city_list:
+        try:
+            df = await fetch_city_data(city, days, timezone)
+            dfs.append(df)
+        except HTTPException as e:
+            # Pass through HTTP exceptions with proper status codes
+            raise e
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error mengambil data untuk {city}: {str(e)}"
+            )
+    
+    # Combine all city data
+    if dfs:
+        merged = pd.concat(dfs, ignore_index=True)
+        records = merged.to_dict(orient="records")
+        return {
+            "cities": city_list,
+            "count": len(records),
+            "days": days,
+            "data": records
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Gagal mengambil data untuk semua kota")
 
 
 def main() -> None:
