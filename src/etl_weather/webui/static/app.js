@@ -299,71 +299,210 @@ async function doSearch() {
 function dailyTempSpec(rows){
   return {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-    description: 'Daily Min/Max Temperature',
+    title: {
+      text: 'Suhu Harian',
+      fontSize: 16,
+      subtitle: 'Minimum dan Maksimum',
+      subtitleFontSize: 13,
+      subtitleColor: '#666'
+    },
     data: { values: rows },
     layer: [
       {
-        transform: [{ fold: ['temp_min','temp_max'], as: ['metric','value'] }],
-        mark: { type: 'line', point: true },
+        // Area between min and max
+        transform: [
+          { calculate: "datum.temp_min", as: "lower" },
+          { calculate: "datum.temp_max", as: "upper" }
+        ],
+        mark: { type: "area", opacity: 0.2, color: "#60a5fa" },
         encoding: {
-          x: { field: 'date', type: 'temporal', title: 'Date' },
-          y: { field: 'value', type: 'quantitative', title: 'Temp (°C)' },
-          color: { field: 'metric', type: 'nominal', title: 'Metric', sort: ['temp_min','temp_max'] },
-          tooltip: [ {field:'date', type:'temporal'}, {field:'metric'}, {field:'value', type:'quantitative', format:'.1f'} ]
+          x: { field: "date", type: "temporal", title: "Tanggal", axis: { format: "%d %b", labelAngle: -45 } },
+          y: { field: "lower", type: "quantitative", title: "Suhu (°C)" },
+          y2: { field: "upper" }
         }
       },
-      { // hot day markers
-        transform: [{ filter: 'datum.is_hot_day === true' }],
-        mark: { type: 'point', filled: true, color: '#dc2626', size: 80, shape: 'triangle-up' },
-        encoding: { x: { field: 'date', type: 'temporal' }, y: { field: 'temp_max', type: 'quantitative' }, tooltip: ['date','temp_max'] }
+      {
+        transform: [{ fold: ['temp_min', 'temp_max'], as: ['metric', 'value'] }],
+        mark: { 
+          type: 'line',
+          point: true,
+          strokeWidth: 2
+        },
+        encoding: {
+          x: { field: 'date', type: 'temporal', title: 'Tanggal' },
+          y: { field: 'value', type: 'quantitative', title: 'Suhu (°C)' },
+          color: {
+            field: 'metric',
+            type: 'nominal',
+            title: 'Metrik',
+            scale: {
+              domain: ['temp_min', 'temp_max'],
+              range: ['#3b82f6', '#ef4444']
+            },
+            legend: {
+              title: null,
+              labelExpr: "datum.label == 'temp_min' ? 'Minimum' : 'Maksimum'"
+            }
+          },
+          tooltip: [
+            { field: 'date', type: 'temporal', title: 'Tanggal', format: '%A, %d %B' },
+            { field: 'metric', type: 'nominal', title: 'Metrik' },
+            { field: 'value', type: 'quantitative', title: 'Suhu', format: '.1f' }
+          ]
+        }
       },
-      { // heavy rain markers
-        transform: [{ filter: 'datum.is_heavy_rain === true' }],
-        mark: { type: 'point', filled: true, color: '#2563eb', size: 80, shape: 'circle' },
-        encoding: { x: { field: 'date', type: 'temporal' }, y: { field: 'temp_min', type: 'quantitative' }, tooltip: ['date','total_rain'] }
+      { // hot day markers with improved tooltip
+        transform: [{ filter: 'datum.is_hot_day === true' }],
+        mark: { type: 'point', filled: true, color: '#dc2626', size: 100, shape: 'triangle-up' },
+        encoding: {
+          x: { field: 'date', type: 'temporal' },
+          y: { field: 'temp_max', type: 'quantitative' },
+          tooltip: [
+            { field: 'date', type: 'temporal', title: 'Tanggal', format: '%A, %d %B' },
+            { field: 'temp_max', type: 'quantitative', title: 'Suhu Maksimum', format: '.1f' }
+          ]
+        }
       }
     ],
-    height: 240
+    height: 240,
+    config: {
+      axis: {
+        gridColor: '#f0f0f0',
+        tickColor: '#888',
+        labelFontSize: 11
+      }
+    }
   };
 }
 
 function dailyRainSpec(rows){
   return {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-    description: 'Daily Rain',
-    data: { values: rows },
-    mark: 'bar',
-    encoding: {
-      x: { field: 'date', type: 'temporal', title: 'Date' },
-      y: { field: 'total_rain', type: 'quantitative', title: 'Rain (mm)' },
-      tooltip: [ {field:'date', type:'temporal'}, {field:'total_rain', type:'quantitative', format:'.1f'} ]
+    title: {
+      text: 'Curah Hujan Harian',
+      fontSize: 16,
+      subtitle: 'Total dalam milimeter (mm)',
+      subtitleFontSize: 13,
+      subtitleColor: '#666'
     },
-    height: 240
+    data: { values: rows },
+    mark: {
+      type: 'bar',
+      cornerRadius: 4,
+      tooltip: true
+    },
+    encoding: {
+      x: {
+        field: 'date',
+        type: 'temporal',
+        title: 'Tanggal',
+        axis: {
+          format: '%d %b',
+          labelAngle: -45
+        }
+      },
+      y: {
+        field: 'total_rain',
+        type: 'quantitative',
+        title: 'Curah Hujan (mm)'
+      },
+      color: {
+        field: 'total_rain',
+        type: 'quantitative',
+        title: 'Intensitas',
+        scale: {
+          type: 'threshold',
+          domain: [5, 20, 50],
+          range: ['#93c5fd', '#60a5fa', '#3b82f6', '#1d4ed8']
+        },
+        legend: { title: 'Intensitas Hujan' }
+      },
+      tooltip: [
+        { field: 'date', type: 'temporal', title: 'Tanggal', format: '%A, %d %B' },
+        { field: 'total_rain', type: 'quantitative', title: 'Curah Hujan', format: '.1f' }
+      ]
+    },
+    height: 240,
+    config: {
+      axis: {
+        gridColor: '#f0f0f0',
+        tickColor: '#888',
+        labelFontSize: 11
+      }
+    }
   };
 }
 
 function dailyPm25Spec(rows){
   return {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-    description: 'Daily PM2.5 Avg',
+    title: {
+      text: 'Kualitas Udara (PM2.5)',
+      fontSize: 16,
+      subtitle: 'Rata-rata harian dalam µg/m³',
+      subtitleFontSize: 13,
+      subtitleColor: '#666'
+    },
     data: { values: rows },
+    // compute a simple status field so tooltip can use it
+    transform: [
+      { calculate: "datum.pm25_avg <= 12 ? 'Baik' : datum.pm25_avg <= 35.4 ? 'Sedang' : 'Tidak Sehat'", as: 'pm25_status' }
+    ],
     layer: [
+      // Background areas for air quality levels (span full x domain)
       {
-        mark: { type: 'line', point: true, color: 'crimson' },
+        data: {
+          values: [
+            { level: "Baik", start: 0, end: 12, color: "#22c55e" },
+            { level: "Sedang", start: 12, end: 35.4, color: "#eab308" },
+            { level: "Tidak Sehat", start: 35.4, end: 100, color: "#dc2626" }
+          ]
+        },
+        mark: { type: "rect", opacity: 0.18 },
         encoding: {
-          x: { field: 'date', type: 'temporal', title: 'Date' },
-          y: { field: 'pm25_avg', type: 'quantitative', title: 'PM2.5 (µg/m³)' },
-          tooltip: [ {field:'date', type:'temporal'}, {field:'pm25_avg', type:'quantitative', format:'.1f'} ]
+          y: { field: "start", type: "quantitative" },
+          y2: { field: "end" },
+          color: { field: "level", type: "nominal", legend: { title: "Kategori" } }
         }
       },
-      { data: { values: [{y:12}, {y:35.4}] }, mark: { type: 'rule', strokeDash: [4,4], color: '#888' }, encoding: { y: { field: 'y', type: 'quantitative' } } },
-      { // unhealthy markers
+      {
+        mark: { 
+          type: 'line',
+          point: true,
+          strokeWidth: 2,
+          color: '#374151'
+        },
+        encoding: {
+          x: { field: 'date', type: 'temporal', title: 'Tanggal', axis: { format: '%d %b', labelAngle: -45 } },
+          y: { field: 'pm25_avg', type: 'quantitative', title: 'PM2.5 (µg/m³)' },
+          tooltip: [
+            { field: 'date', type: 'temporal', title: 'Tanggal', format: '%A, %d %B' },
+            { field: 'pm25_avg', type: 'quantitative', title: 'PM2.5', format: '.1f' },
+            { field: 'pm25_status', type: 'nominal', title: 'Status' }
+          ]
+        }
+      },
+      { // threshold lines with labels
+        data: { values: [ { y: 12, label: "Batas Baik (12)" }, { y: 35.4, label: "Batas Sedang (35.4)" } ] },
+        mark: { type: 'rule', strokeDash: [4,4], opacity: 0.6 },
+        encoding: { y: { field: 'y', type: 'quantitative' }, tooltip: [ { field: 'label', type: 'nominal' } ] }
+      },
+      { // unhealthy markers with improved tooltips
         transform: [{ filter: 'datum.is_unhealthy_pm25 === true' }],
-        mark: { type: 'point', filled: true, color: '#ea580c', size: 80, shape: 'square' },
-        encoding: { x: { field: 'date', type: 'temporal' }, y: { field: 'pm25_avg', type: 'quantitative' }, tooltip: ['date','pm25_avg'] }
+        mark: { type: 'point', filled: true, color: '#dc2626', size: 100 },
+        encoding: {
+          x: { field: 'date', type: 'temporal' },
+          y: { field: 'pm25_avg', type: 'quantitative' },
+          tooltip: [
+            { field: 'date', type: 'temporal', title: 'Tanggal', format: '%A, %d %B' },
+            { field: 'pm25_avg', type: 'quantitative', title: 'PM2.5', format: '.1f' },
+            { value: "⚠️ Kualitas Udara Tidak Sehat", title: "Peringatan" }
+          ]
+        }
       }
     ],
-    height: 240
+    height: 240,
+    config: { axis: { gridColor: '#f0f0f0', tickColor: '#888', labelFontSize: 11 } }
   };
 }
 
@@ -380,11 +519,37 @@ async function loadDaily() {
     el('#daily-summary').textContent = 'No rows';
     return;
   }
-  // summary
+  // summary with improved styling
   const maxTemp = Math.max(...rows.map(r => Number(r.temp_max ?? NaN)).filter(n => !Number.isNaN(n)));
   const pm25Avg = (rows.map(r => Number(r.pm25_avg ?? NaN)).filter(n => !Number.isNaN(n)).reduce((a,b)=>a+b,0) / rows.length);
   const hotDays = rows.filter(r => r.is_hot_day === true).length;
-  el('#daily-summary').textContent = `Max temp: ${fmt.format(maxTemp)} °C • Avg PM2.5: ${fmt.format(pm25Avg)} • Hot days: ${hotDays}`;
+  
+  const summaryHtml = `
+    <div class="daily-stats">
+      <div class="daily-stat-item temp">
+        <div class="icon">🌡️</div>
+        <div>
+          <div class="label">Temperatur Maksimum</div>
+          <div class="value">${fmt.format(maxTemp)}°C</div>
+        </div>
+      </div>
+      <div class="daily-stat-item pm25">
+        <div class="icon">💨</div>
+        <div>
+          <div class="label">Rata-rata PM2.5</div>
+          <div class="value">${fmt.format(pm25Avg)} µg/m³</div>
+        </div>
+      </div>
+      <div class="daily-stat-item hot">
+        <div class="icon">🔥</div>
+        <div>
+          <div class="label">Hari Panas</div>
+          <div class="value">${hotDays} hari</div>
+        </div>
+      </div>
+    </div>
+  `;
+  el('#daily-summary').innerHTML = summaryHtml;
     // charts
   try {
     await vegaEmbed('#daily-chart-temp', dailyTempSpec(rows), { actions: false });
