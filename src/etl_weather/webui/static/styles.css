@@ -50,6 +50,15 @@ table th{background:#f6f8fa}
 .pill{border-radius:999px;padding:.35rem .8rem;background:var(--chip);border:1px solid var(--border)}
 .fun-fact{margin-top:0.8rem;padding:0.8rem;background:#e0f7fa;border-radius:8px;border:1px solid #b2ebf2}
 .fun-fact.hidden{display:none}
+/* AI status pill near fun fact */
+.ai-status{display:inline-flex;align-items:center;gap:8px;font-size:.85rem;padding:.18rem .5rem;border-radius:999px;border:1px solid rgba(0,0,0,.06);background:#fff;color:var(--muted)}
+.ai-status.ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+.ai-status.warn{background:#fff7ed;color:#92400e;border-color:#fed7aa}
+.ai-status.bad{background:#fff1f2;color:#9f1239;border-color:#fecaca}
+.ai-status .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.ai-status .dot.ok{background:#10b981}
+.ai-status .dot.warn{background:#f59e0b}
+.ai-status .dot.bad{background:#ef4444}
 details summary{cursor:pointer;color:var(--primary);margin-top:.5rem}
 .footer {
     background: linear-gradient(180deg, transparent, rgba(226, 232, 240, 0.3));
