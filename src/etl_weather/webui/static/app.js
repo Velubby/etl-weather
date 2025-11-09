@@ -204,7 +204,7 @@ function resetViewsOnCityChange(){
     const ds = el('#daily-summary'); if (ds) ds.textContent = '';
     const dc = el('#daily-cards'); if (dc) dc.innerHTML = '';
     const charts = ['#daily-chart-temp','#daily-chart-rain','#daily-chart-pm25','#daily-chart-feels','#daily-chart-dew'];
-    charts.forEach(id => { const c = el(id); if (c) c.innerHTML = ''; });
+    ['#daily-chart-temp','#daily-chart-rain','#daily-chart-pm25'].forEach(id => { const c = el(id); if (c) c.innerHTML = ''; });
   }
   // Hide Hourly and clear list
   const hourly = el('#hourly');
@@ -367,35 +367,7 @@ function dailyPm25Spec(rows){
   };
 }
 
-function dailyFeelsSpec(rows){
-  return {
-    $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-    description: 'Feels Like Avg',
-    data: { values: rows },
-    mark: { type: 'line', point: true, color: '#0ea5e9' },
-    encoding: {
-      x: { field: 'date', type: 'temporal', title: 'Date' },
-      y: { field: 'feels_like_avg', type: 'quantitative', title: 'Feels Like (°C)' },
-      tooltip: [ {field:'date', type:'temporal'}, {field:'feels_like_avg', type:'quantitative', format:'.1f'} ]
-    },
-    height: 240
-  };
-}
 
-function dailyDewSpec(rows){
-  return {
-    $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-    description: 'Dew Point Avg',
-    data: { values: rows },
-    mark: { type: 'line', point: true, color: '#059669' },
-    encoding: {
-      x: { field: 'date', type: 'temporal', title: 'Date' },
-      y: { field: 'dew_point_avg', type: 'quantitative', title: 'Dew Point (°C)' },
-      tooltip: [ {field:'date', type:'temporal'}, {field:'dew_point_avg', type:'quantitative', format:'.1f'} ]
-    },
-    height: 240
-  };
-}
 
 async function loadDaily() {
   if (!selectedCity) return alert('Select a city first');
@@ -413,18 +385,14 @@ async function loadDaily() {
   const pm25Avg = (rows.map(r => Number(r.pm25_avg ?? NaN)).filter(n => !Number.isNaN(n)).reduce((a,b)=>a+b,0) / rows.length);
   const hotDays = rows.filter(r => r.is_hot_day === true).length;
   el('#daily-summary').textContent = `Max temp: ${fmt.format(maxTemp)} °C • Avg PM2.5: ${fmt.format(pm25Avg)} • Hot days: ${hotDays}`;
-  // charts
+    // charts
   try {
     await vegaEmbed('#daily-chart-temp', dailyTempSpec(rows), { actions: false });
     await vegaEmbed('#daily-chart-rain', dailyRainSpec(rows), { actions: false });
     await vegaEmbed('#daily-chart-pm25', dailyPm25Spec(rows), { actions: false });
-    await vegaEmbed('#daily-chart-feels', dailyFeelsSpec(rows), { actions: false });
-    await vegaEmbed('#daily-chart-dew', dailyDewSpec(rows), { actions: false });
   } catch (e) {
     // quietly skip chart rendering errors in production UI
-  }
-
-  // friendly cards
+  }  // friendly cards
   renderDailyCards(rows);
 
   // raw table intentionally omitted to keep UI focused

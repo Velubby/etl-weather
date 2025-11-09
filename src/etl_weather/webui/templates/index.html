@@ -67,8 +67,6 @@
         <div class="chart" id="daily-chart-temp"></div>
         <div class="chart" id="daily-chart-rain"></div>
         <div class="chart" id="daily-chart-pm25"></div>
-        <div class="chart" id="daily-chart-feels"></div>
-        <div class="chart" id="daily-chart-dew"></div>
       </div>
       <div id="daily-cards" class="cards"></div>
     </section>
@@ -91,7 +89,16 @@
     </section>
 
     <footer class="footer">
-      <p>Backend: FastAPI • Data source: Open-Meteo • Charts: Vega-Lite</p>
+      <div class="footer-content">
+        <p class="footer-text">
+          <span class="footer-item">Backend: <a href="https://fastapi.tiangolo.com/" target="_blank">FastAPI</a></span>
+          <span class="footer-divider">•</span>
+          <span class="footer-item">Data source: <a href="https://open-meteo.com/" target="_blank">Open-Meteo</a></span>
+          <span class="footer-divider">•</span>
+          <span class="footer-item">Charts: <a href="https://vega.github.io/vega-lite/" target="_blank">Vega-Lite</a></span>
+        </p>
+        <p class="footer-copyright">© 2025 GGWP Weather. All rights reserved.</p>
+      </div>
     </footer>
 
     <script src="/static/app.js" type="module"></script>
