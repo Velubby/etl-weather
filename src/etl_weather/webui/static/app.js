@@ -77,9 +77,13 @@ async function loadRegencies(provinceCode) {
         regencies.forEach(regency => {
             const option = document.createElement('option');
             // Try different possible property names for the name
-            const name = regency.name || regency.regency_name || regency.nama;
-            option.value = name;
-            option.textContent = name;
+            let name = regency.name || regency.regency_name || regency.nama;
+            // Clean up the name for display
+            const displayName = name;
+            // Clean up the name for search (remove Kabupaten/Kota)
+            name = name.replace(/^(Kabupaten|Kota)\s+/i, '');
+            option.value = name;  // Use clean name for search
+            option.textContent = displayName;  // Show full name in dropdown
             if (name) {
                 regencySelect.appendChild(option);
             }
