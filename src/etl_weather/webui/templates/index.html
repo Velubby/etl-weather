@@ -21,40 +21,6 @@
             <p class="subtitle">Fast, friendly weather & air quality explorer</p>
           </div>
         </div>
-        <div class="searchbox">
-          <div class="search-container">
-            <div class="search-tabs">
-              <div class="search-tab active" data-target="text-search">Search by Text</div>
-              <div class="search-tab" data-target="region-search">Search by Region</div>
-            </div>
-            <div class="search-panels">
-              <div class="search-panel active" id="text-search">
-                <div class="search-group">
-                  <div class="search-input-wrapper">
-                    <i class="search-icon">🔍</i>
-                    <input id="q" type="text" class="search-input" placeholder="Enter city name..." />
-                  </div>
-                  <button id="btn-search" class="search-button">Search</button>
-                </div>
-              </div>
-              <div class="search-panel" id="region-search">
-                <div class="region-group">
-                  <div class="select-wrapper">
-                    <select id="province-select" class="region-select">
-                      <option value="">Pilih Provinsi...</option>
-                    </select>
-                  </div>
-                  <div class="select-wrapper">
-                    <select id="regency-select" class="region-select" disabled>
-                      <option value="">Pilih Kota/Kabupaten...</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <ul id="results" class="search-results"></ul>
-        </div>
         <nav class="nav">
           <a href="#today">Today</a>
           <a href="#daily">Daily</a>
@@ -63,6 +29,40 @@
         </nav>
       </div>
     </header>
+
+    <section class="search-section">
+      <div class="search-card">
+        <div class="search-tabs">
+          <div class="search-tab active" data-target="text-search">Search by Text</div>
+          <div class="search-tab" data-target="region-search">Indonesia Region</div>
+        </div>
+        <div class="search-panels">
+          <div class="search-panel active" id="text-search">
+            <div class="search-group">
+              <div class="search-input-wrapper">
+                <input id="q" type="text" class="search-input" placeholder="Enter city name..." />
+              </div>
+              <button id="btn-search" class="search-button">Search</button>
+            </div>
+            <ul id="results" class="search-results"></ul>
+          </div>
+          <div class="search-panel" id="region-search">
+            <div class="region-group">
+              <div class="select-wrapper">
+                <select id="province-select" class="region-select">
+                  <option value="">Pilih Provinsi...</option>
+                </select>
+              </div>
+              <div class="select-wrapper">
+                <select id="regency-select" class="region-select" disabled>
+                  <option value="">Pilih Kota/Kabupaten...</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Search moved to the app bar; favorites live in Actions below -->
 

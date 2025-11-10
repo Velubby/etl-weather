@@ -119,7 +119,6 @@ async function loadRegencies(provinceCode) {
 // Event listeners for region selection
 provinceSelect.addEventListener('change', (e) => {
     const selectedValue = e.target.value;
-    console.log('Selected province:', selectedValue); // Debug log
     if (selectedValue && selectedValue !== "") {
         loadRegencies(selectedValue);
     } else {
@@ -132,7 +131,19 @@ provinceSelect.addEventListener('change', (e) => {
 regencySelect.addEventListener('change', (e) => {
     const selectedValue = e.target.value;
     if (selectedValue && selectedValue !== "") {
+        // Set the search input value
         el('#q').value = selectedValue;
+        
+        // Switch to text search tab
+        document.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.search-panel').forEach(p => p.classList.remove('active'));
+        
+        const textSearchTab = document.querySelector('.search-tab[data-target="text-search"]');
+        const textSearchPanel = document.getElementById('text-search');
+        if (textSearchTab) textSearchTab.classList.add('active');
+        if (textSearchPanel) textSearchPanel.classList.add('active');
+        
+        // Trigger the search
         el('#btn-search').click();
     }
 });

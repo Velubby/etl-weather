@@ -30,7 +30,7 @@ where = ["src"]
 
 [project.optional-dependencies]
 ai = [
-  "google-generativeai>=0.7"
+  "google-generativeai>=0.8"
 ]
 
 dev = [
