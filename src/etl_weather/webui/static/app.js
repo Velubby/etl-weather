@@ -11,7 +11,14 @@ let lastHourlyRows = null; // reserved for future use
 // Load provinces on page load
 async function loadProvinces() {
     try {
-        const response = await fetch('/api/provinces');
+        const timestamp = new Date().getTime();
+        const response = await fetch(`/api/provinces?_=${timestamp}`, {
+            cache: 'no-cache',
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+        });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -21,6 +28,9 @@ async function loadProvinces() {
         // Sort provinces by name
         provinces.sort((a, b) => a.name.localeCompare(b.name));
         
+        // Clear existing options
+        provinceSelect.innerHTML = '<option value="">Pilih Provinsi...</option>';
+        
         provinces.forEach(province => {
             const option = document.createElement('option');
             option.value = province.id;
@@ -28,8 +38,6 @@ async function loadProvinces() {
             provinceSelect.appendChild(option);
         });
     } catch (error) {
-        console.error('Error loading provinces:', error);
-        // Show error message to user
         const errorOption = document.createElement('option');
         errorOption.value = "";
         errorOption.textContent = "Error loading provinces";
@@ -46,7 +54,17 @@ async function loadRegencies(provinceCode) {
     if (!provinceCode) return;
     
     try {
-        const response = await fetch(`/api/regencies/${provinceCode}`);
+        // Remove any prefix if present (e.g., "ID-" or similar)
+        const cleanCode = provinceCode.replace(/^[A-Za-z]+-/, '');
+        
+        const timestamp = new Date().getTime();
+        const response = await fetch(`/api/regencies/${cleanCode}?_=${timestamp}`, {
+            cache: 'no-cache',
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+        });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -58,28 +76,43 @@ async function loadRegencies(provinceCode) {
         
         regencies.forEach(regency => {
             const option = document.createElement('option');
-            option.value = regency.name;
-            option.textContent = regency.name;
-            regencySelect.appendChild(option);
+            // Try different possible property names for the name
+            const name = regency.name || regency.regency_name || regency.nama;
+            option.value = name;
+            option.textContent = name;
+            if (name) {
+                regencySelect.appendChild(option);
+            }
         });
         
         regencySelect.disabled = false;
     } catch (error) {
-        console.error('Error loading regencies:', error);
-        // Show error message to user
         const errorOption = document.createElement('option');
         errorOption.value = "";
         errorOption.textContent = "Error loading cities";
         regencySelect.innerHTML = '';
         regencySelect.appendChild(errorOption);
+        regencySelect.disabled = true;
     }
 }
 
 // Event listeners for region selection
-provinceSelect.addEventListener('change', (e) => loadRegencies(e.target.value));
+provinceSelect.addEventListener('change', (e) => {
+    const selectedValue = e.target.value;
+    console.log('Selected province:', selectedValue); // Debug log
+    if (selectedValue && selectedValue !== "") {
+        loadRegencies(selectedValue);
+    } else {
+        // Reset regency select if no province is selected
+        regencySelect.innerHTML = '<option value="">Pilih Kota/Kabupaten...</option>';
+        regencySelect.disabled = true;
+    }
+});
+
 regencySelect.addEventListener('change', (e) => {
-    if (e.target.value) {
-        el('#q').value = e.target.value;
+    const selectedValue = e.target.value;
+    if (selectedValue && selectedValue !== "") {
+        el('#q').value = selectedValue;
         el('#btn-search').click();
     }
 });

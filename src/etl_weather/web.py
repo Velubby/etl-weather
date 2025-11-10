@@ -36,38 +36,78 @@ def _load_csv(path: Path) -> pd.DataFrame:
 
 async def _fetch_provinces() -> list[dict]:
     url = "https://wilayah.id/api/provinces.json"
+    headers = {
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
+    }
     try:
         timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.get(url)
+            r = await client.get(url, headers=headers)
             r.raise_for_status()
             import logging
-            logging.info(f"Provinces API Response: {r.text}")
+            logging.info(f"Provinces raw response: {r.text[:200]}...")
             data = r.json()
-            # If data is already in the correct format, return it directly
-            if isinstance(data, list):
-                return data
-            # If data has provinces key, return that
-            if isinstance(data, dict) and "provinces" in data:
-                return data["provinces"]
-            # If neither, assume the response is wrapped and we need the data key
-            if isinstance(data, dict) and "data" in data:
-                return data["data"]
-            return data
+            # Transform the data to ensure it has the correct structure
+            provinces = []
+            if isinstance(data, dict):
+                if "provinces" in data:
+                    provinces = data["provinces"]
+                elif "data" in data:
+                    provinces = data["data"]
+                else:
+                    provinces = [{"id": k, "name": v} for k, v in data.items()]
+            elif isinstance(data, list):
+                provinces = data
+            
+            # Ensure each province has the required fields
+            formatted_provinces = []
+            for prov in provinces:
+                if isinstance(prov, dict):
+                    prov_id = prov.get("id") or prov.get("province_id") or prov.get("code")
+                    prov_name = prov.get("name") or prov.get("province_name") or prov.get("nama")
+                    if prov_id and prov_name:
+                        formatted_provinces.append({"id": str(prov_id), "name": prov_name})
+            
+            logging.info(f"Formatted provinces: {formatted_provinces}")
+            return formatted_provinces
     except httpx.HTTPError as e:
         import logging
         logging.error(f"Error fetching provinces: {str(e)}")
         return []
 
 async def _fetch_regencies(province_code: str) -> list[dict]:
+    # The API expects just the number, remove any prefix if present
+    if "-" in province_code:
+        province_code = province_code.split("-")[0]
+    
     url = f"https://wilayah.id/api/regencies/{province_code}.json"
+    headers = {
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
+    }
     try:
         timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.get(url)
+            r = await client.get(url, headers=headers)
             r.raise_for_status()
-            return r.json()
-    except httpx.HTTPError:
+            import logging
+            logging.info(f"Regencies response for {province_code}: {r.text[:200]}...")  # Log first 200 chars
+            data = r.json()
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                if "data" in data:
+                    return data["data"]
+                if "regencies" in data:
+                    return data["regencies"]
+                # Handle case where the response might be directly keyed by province code
+                if province_code in data:
+                    return data[province_code]
+            return data
+    except httpx.HTTPError as e:
+        import logging
+        logging.error(f"Error fetching regencies: {str(e)}")
         return []
 
 async def _geocode_search(
@@ -110,6 +150,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add headers middleware to prevent caching
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # API Routes
 @app.get("/api/provinces")
