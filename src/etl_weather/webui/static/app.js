@@ -2,9 +2,90 @@ const el = (q) => document.querySelector(q);
 const resultsEl = el('#results');
 const actionsEl = el('#actions');
 const selectedCityEl = el('#selected-city');
+const provinceSelect = el('#province-select');
+const regencySelect = el('#regency-select');
 
 let selectedCity = null;
 let lastHourlyRows = null; // reserved for future use
+
+// Load provinces on page load
+async function loadProvinces() {
+    try {
+        const response = await fetch('/api/provinces');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        const provinces = data.results || [];
+        
+        // Sort provinces by name
+        provinces.sort((a, b) => a.name.localeCompare(b.name));
+        
+        provinces.forEach(province => {
+            const option = document.createElement('option');
+            option.value = province.id;
+            option.textContent = province.name;
+            provinceSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading provinces:', error);
+        // Show error message to user
+        const errorOption = document.createElement('option');
+        errorOption.value = "";
+        errorOption.textContent = "Error loading provinces";
+        provinceSelect.innerHTML = '';
+        provinceSelect.appendChild(errorOption);
+    }
+}
+
+// Load regencies when province is selected
+async function loadRegencies(provinceCode) {
+    regencySelect.innerHTML = '<option value="">Pilih Kota/Kabupaten...</option>';
+    regencySelect.disabled = !provinceCode;
+    
+    if (!provinceCode) return;
+    
+    try {
+        const response = await fetch(`/api/regencies/${provinceCode}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        const regencies = data.results || [];
+        
+        // Sort regencies by name
+        regencies.sort((a, b) => a.name.localeCompare(b.name));
+        
+        regencies.forEach(regency => {
+            const option = document.createElement('option');
+            option.value = regency.name;
+            option.textContent = regency.name;
+            regencySelect.appendChild(option);
+        });
+        
+        regencySelect.disabled = false;
+    } catch (error) {
+        console.error('Error loading regencies:', error);
+        // Show error message to user
+        const errorOption = document.createElement('option');
+        errorOption.value = "";
+        errorOption.textContent = "Error loading cities";
+        regencySelect.innerHTML = '';
+        regencySelect.appendChild(errorOption);
+    }
+}
+
+// Event listeners for region selection
+provinceSelect.addEventListener('change', (e) => loadRegencies(e.target.value));
+regencySelect.addEventListener('change', (e) => {
+    if (e.target.value) {
+        el('#q').value = e.target.value;
+        el('#btn-search').click();
+    }
+});
+
+// Load provinces on page load
+loadProvinces();
 
 // Simple DOM helpers and UI state
 

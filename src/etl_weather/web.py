@@ -34,6 +34,42 @@ def _load_csv(path: Path) -> pd.DataFrame:
         return pd.read_csv(path)
 
 
+async def _fetch_provinces() -> list[dict]:
+    url = "https://wilayah.id/api/provinces.json"
+    try:
+        timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            import logging
+            logging.info(f"Provinces API Response: {r.text}")
+            data = r.json()
+            # If data is already in the correct format, return it directly
+            if isinstance(data, list):
+                return data
+            # If data has provinces key, return that
+            if isinstance(data, dict) and "provinces" in data:
+                return data["provinces"]
+            # If neither, assume the response is wrapped and we need the data key
+            if isinstance(data, dict) and "data" in data:
+                return data["data"]
+            return data
+    except httpx.HTTPError as e:
+        import logging
+        logging.error(f"Error fetching provinces: {str(e)}")
+        return []
+
+async def _fetch_regencies(province_code: str) -> list[dict]:
+    url = f"https://wilayah.id/api/regencies/{province_code}.json"
+    try:
+        timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            return r.json()
+    except httpx.HTTPError:
+        return []
+
 async def _geocode_search(
     query: str, count: int = 5, language: str = "id"
 ) -> list[dict]:
@@ -75,6 +111,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# API Routes
+@app.get("/api/provinces")
+async def get_provinces() -> dict:
+    provinces = await _fetch_provinces()
+    return {"results": provinces}
+
+@app.get("/api/regencies/{province_code}")
+async def get_regencies(province_code: str) -> dict:
+    regencies = await _fetch_regencies(province_code)
+    return {"results": regencies}
 
 # Prefer the source tree during development; fall back to package path when installed.
 def _resolve_webui_dir() -> Path:
@@ -220,6 +266,16 @@ async def ai_status() -> dict:
         "error": err,
     }
 
+
+@app.get("/api/provinces")
+async def get_provinces() -> dict:
+    provinces = await _fetch_provinces()
+    return {"results": provinces}
+
+@app.get("/api/regencies/{province_code}")
+async def get_regencies(province_code: str) -> dict:
+    regencies = await _fetch_regencies(province_code)
+    return {"results": regencies}
 
 @app.get("/search")
 async def search(
