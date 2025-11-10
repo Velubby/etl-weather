@@ -655,64 +655,174 @@ async function loadHourly() {
 }
 
 async function doCompare() {
-  const v = el('#cmp-input').value.trim();
-  if (!v) return;
-  const res = await fetch(`/compare?cities=${encodeURIComponent(v)}&refresh=false`);
-  const data = await res.json();
-  const rows = data.data || [];
-  el('#compare-count').textContent = `Rows: ${rows.length}`;
-  // charts (temp_max & pm25_avg by city)
-  const tempSpec = {
-    $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-    description: 'Temp Max per City', data: { values: rows },
-    mark: { type: 'line', point: true },
-    encoding: {
-      x: { field: 'date', type: 'temporal' },
-      y: { field: 'temp_max', type: 'quantitative', title: 'Temp Max (°C)' },
-      color: { field: 'city', type: 'nominal' },
-      tooltip: ['date', 'city', {field:'temp_max', type:'quantitative', format:'.1f'}]
-    },
-    height: 240
-  };
-  const pmSpec = {
-    $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-    description: 'PM2.5 Avg per City', data: { values: rows },
-    mark: { type: 'line', point: true, color: 'crimson' },
-    encoding: {
-      x: { field: 'date', type: 'temporal' },
-      y: { field: 'pm25_avg', type: 'quantitative', title: 'PM2.5 (µg/m³)' },
-      color: { field: 'city', type: 'nominal' },
-      tooltip: ['date', 'city', {field:'pm25_avg', type:'quantitative', format:'.1f'}]
-    },
-    height: 240
-  };
-  try {
-    await vegaEmbed('#compare-chart-temp', tempSpec, { actions: false });
-    await vegaEmbed('#compare-chart-pm25', pmSpec, { actions: false });
-  } catch (e) {
-    // quietly skip chart rendering errors in production UI
-  }
-  // summary pills per city
-  const byCity = new Map();
-  for (const r of rows){
-    const c = r.city || 'City';
-    if (!byCity.has(c)) byCity.set(c, []);
-    byCity.get(c).push(r);
-  }
-  const pillsEl = el('#compare-summary');
-  pillsEl.innerHTML = '';
-  for (const [city, arr] of byCity.entries()){
-    const tmax = arr.map(r=>Number(r.temp_max??NaN)).filter(n=>!Number.isNaN(n));
-    const p25 = arr.map(r=>Number(r.pm25_avg??NaN)).filter(n=>!Number.isNaN(n));
-    const tavg = tmax.length? tmax.reduce((a,b)=>a+b,0)/tmax.length : NaN;
-    const pavg = p25.length? p25.reduce((a,b)=>a+b,0)/p25.length : NaN;
-    const pill = document.createElement('span');
-    pill.className = 'pill';
-    pill.innerHTML = `<strong>${city}</strong> • TempMax Avg: ${fmt.format(tavg)}°C • <span class="${badgeClassForPm25(pavg)}">PM2.5 Avg: ${fmt.format(pavg)}</span>`;
-    pillsEl.appendChild(pill);
+  // Enhanced compare: read controls and call backend, render Vega-Lite charts and textual summary
+  const cmpInput = el('#cmp-input');
+  const cmpMetric = el('#cmp-metric');
+  const cmpNormalize = el('#cmp-normalize');
+  const cmpSmooth = el('#cmp-smooth');
+  const cmpRange = el('#cmp-range');
+  const cmpLoading = el('#cmp-loading');
+  const compareCount = el('#compare-count');
+  const compareExplanation = el('#compare-explanation');
+  const compareSummary = el('#compare-summary');
+
+  function showLoading(show){ if (cmpLoading) cmpLoading.style.display = show ? 'inline' : 'none'; }
+
+  function normalizeSeries(series){
+    const byCity = {};
+    series.forEach(d => { byCity[d.city] = byCity[d.city] || []; byCity[d.city].push(d.value); });
+    const scales = {};
+    Object.entries(byCity).forEach(([city, vals]) => { const min = Math.min(...vals), max = Math.max(...vals); scales[city] = {min, max, range: max - min || 1}; });
+    return series.map(d => ({...d, value: (d.value - scales[d.city].min) / scales[d.city].range}));
   }
 
-  // raw compare table intentionally omitted to keep UI focused
+  function smoothSeries(series, window = 3){
+    const out = [];
+    const byCity = {};
+    series.forEach(d => { byCity[d.city] = byCity[d.city] || []; byCity[d.city].push(d); });
+    Object.values(byCity).forEach(arr => {
+      for (let i = 0; i < arr.length; i++){
+        const start = Math.max(0, i - Math.floor(window/2));
+        const slice = arr.slice(start, start + window);
+        const avg = slice.reduce((s,x)=>s + x.value, 0) / slice.length;
+        out.push({...arr[i], value: avg});
+      }
+    });
+    return out;
+  }
+
+  function aggregateSummary(citiesData, metricKey){
+    const summary = citiesData.map(city => {
+      const vals = (city.daily || []).map(d => d[metricKey]).filter(v => v != null).map(Number);
+      const avg = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+      const max = vals.length ? Math.max(...vals) : null;
+      return {city: city.name, avg, max};
+    });
+    summary.sort((a,b) => (b.avg || 0) - (a.avg || 0));
+    return summary;
+  }
+
+  function buildVegaSpec(data, metricLabel){
+    // Simplified spec without custom selection to avoid incompatible signal names.
+    return {
+      "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+      "data": { "values": data },
+      "width": "container",
+      "height": 220,
+      "encoding": {
+        "x": {"field":"date","type":"temporal","title":"Date"},
+        "y": {"field":"value","type":"quantitative","title":metricLabel,"axis":{"grid":true}},
+        "color": {"field":"city","type":"nominal","legend":{"orient":"top","columns":4}},
+        "tooltip": [
+          {"field":"city","type":"nominal","title":"City"},
+          {"field":"date","type":"temporal","title":"Date"},
+          {"field":"value","type":"quantitative","title":metricLabel}
+        ]
+      },
+      "layer": [
+        { "mark": {"type":"line","point":true,"strokeWidth":2,"opacity":0.95} }
+      ],
+      "config": {"axis": {"labelFontSize":11,"titleFontSize":12}}
+    };
+  }
+
+  async function renderCompareAll(cities, rangeDays = 14){
+    showLoading(true);
+    compareExplanation.textContent = '';
+    compareSummary.innerHTML = '';
+    compareCount.textContent = `Comparing ${cities.length} city(ies)…`;
+    try{
+      const q = `/compare?cities=${encodeURIComponent(cities.join(','))}&days=${encodeURIComponent(rangeDays)}&refresh=false`;
+      const res = await fetch(q);
+      if (!res.ok) throw new Error('Backend compare failed: ' + res.status);
+      const payload = await res.json();
+
+      // Build per-metric series arrays
+      const tempSeries = [];
+      const pmSeries = [];
+      let citiesData = [];
+
+      if (Array.isArray(payload.cities)){
+        citiesData = payload.cities;
+        payload.cities.forEach(city => {
+          (city.daily || []).forEach(d => {
+            const date = d.date || d.day || d.datetime;
+            if (d.temp_max != null) tempSeries.push({ date, city: city.name, value: Number(d.temp_max) });
+            const pm = d.pm25_avg ?? d.pm25 ?? d.pm25_mean;
+            if (pm != null) pmSeries.push({ date, city: city.name, value: Number(pm) });
+          });
+        });
+      } else if (Array.isArray(payload.data) || Array.isArray(payload)){
+        const rows = payload.data || payload;
+        const by = {};
+        rows.forEach(r => {
+          const date = r.date || r.day || r.datetime;
+          if (r.temp_max != null) tempSeries.push({ date, city: r.city || r.name || 'City', value: Number(r.temp_max) });
+          const pm = r.pm25_avg ?? r.pm25 ?? r.pm25_mean ?? r.pm25Avg;
+          if (pm != null) pmSeries.push({ date, city: r.city || r.name || 'City', value: Number(pm) });
+          const name = r.city || r.name || 'City';
+          by[name] = by[name] || { name, daily: [] };
+          by[name].daily.push(r);
+        });
+        citiesData = Object.values(by);
+      }
+
+      // sort series
+      tempSeries.sort((a,b) => new Date(a.date) - new Date(b.date));
+      pmSeries.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+      // render both charts
+      document.getElementById('compare-chart-temp').style.display = '';
+      document.getElementById('compare-chart-pm25').style.display = '';
+      const tempSpec = buildVegaSpec(tempSeries, 'Temperature (°C)');
+      const pmSpec = buildVegaSpec(pmSeries, 'PM2.5 (µg/m³)');
+      await Promise.all([
+        vegaEmbed('#compare-chart-temp', tempSpec, { actions: false }),
+        vegaEmbed('#compare-chart-pm25', pmSpec, { actions: false })
+      ]);
+
+      // summaries
+      const tempSummary = aggregateSummary(citiesData, 'temp_max');
+      const pmSummary = aggregateSummary(citiesData, 'pm25_avg');
+
+      compareSummary.innerHTML = '';
+      compareSummary.innerHTML += tempSummary.map(s => `<span class="pill">${s.city}: Temp avg ${s.avg != null ? s.avg.toFixed(1) + ' °C' : '—'}</span>`).join(' ');
+      compareSummary.innerHTML += '<br/>' + pmSummary.map(s => `<span class="pill">${s.city}: PM2.5 avg ${s.avg != null ? s.avg.toFixed(1) + ' µg/m³' : '—'}</span>`).join(' ');
+
+      // explanation combining both
+      function mkText(top, second, bottom, label){
+        if (!top) return '';
+        let t = `${top.city} has the highest average ${label} (${top.avg != null ? top.avg.toFixed(1) : '—'}).`;
+        if (second && top.avg != null && second.avg != null){
+          const diff = ((top.avg - second.avg) / Math.abs(second.avg) * 100).toFixed(0);
+          t += ` ${top.city} is ${Math.abs(diff)}% ${top.avg>second.avg? 'higher':'lower'} than ${second.city}.`;
+        }
+        t += ` ${bottom ? `${bottom.city} recorded the lowest average (${bottom.avg != null ? bottom.avg.toFixed(1) : '—'}).` : ''}`;
+        return t;
+      }
+
+      const tTop = tempSummary[0], tSecond = tempSummary[1], tBottom = tempSummary[tempSummary.length-1];
+      const pTop = pmSummary[0], pSecond = pmSummary[1], pBottom = pmSummary[pmSummary.length-1];
+      compareExplanation.innerHTML = `<strong>Quick take</strong><div>${mkText(tTop,tSecond,tBottom,'Temperature (°C)')}</div><div>${mkText(pTop,pSecond,pBottom,'PM2.5 (µg/m³)')}</div>`;
+
+      compareCount.textContent = `Compared ${citiesData.length} city(ies) over last ${rangeDays} days.`;
+
+    } catch(err){
+      console.error('Compare error', err);
+      compareExplanation.innerHTML = `<span class="error">Failed to fetch comparison data. ${err.message}</span>`;
+      document.getElementById('compare-chart-temp').innerHTML = '';
+      document.getElementById('compare-chart-pm25').innerHTML = '';
+    } finally {
+      showLoading(false);
+    }
+  }
+
+  // handler: read UI and call renderCompareAll
+  const raw = el('#cmp-input').value || '';
+  const cities = raw.split(',').map(s=>s.trim()).filter(Boolean);
+  if (!cities.length){ el('#compare-explanation').innerHTML = '<span class="error">Please enter one or more city names separated by commas.</span>'; return; }
+  const rangeDays = 14; // default
+  renderCompareAll(cities, rangeDays);
 }
 
 el('#btn-search').addEventListener('click', doSearch);

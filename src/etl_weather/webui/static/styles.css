@@ -203,3 +203,15 @@ details summary{cursor:pointer;color:var(--primary);margin-top:.5rem}
 .i{display:inline-block;stroke:currentColor;fill:none}
 .today-hero .temp-big .i{width:22px;height:22px}
 .hourly-row .icon.weather .i{width:28px;height:28px}
+
+/* Compare UI tweaks */
+.compare-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.compare-controls input#cmp-input{flex:1;min-width:260px;padding:.6rem .9rem;border-radius:999px;border:1px solid var(--border);background:#fff}
+.compare-controls button{padding:.5rem .9rem;border-radius:999px}
+.compare-explanation{margin-top:8px;padding:10px 12px;background:#fff;border:1px solid var(--border);border-radius:10px;color:var(--text)}
+.compare-meta{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.compare-meta .muted{color:var(--muted)}
+.pill{margin:4px 6px 4px 0}
+
+/* make charts visually less dense */
+.chart{padding:12px}

@@ -79,13 +79,23 @@
 
     <section id="compare" class="panel">
       <h2>Compare Cities</h2>
-      <input id="cmp-input" type="text" placeholder="Enter cities separated by comma" />
-      <button id="btn-compare">Compare</button>
-      <div id="compare-count"></div>
-      <div class="charts">
-        <div class="chart" id="compare-chart-temp"></div>
-        <div class="chart" id="compare-chart-pm25"></div>
+
+      <div class="compare-controls">
+        <input id="cmp-input" type="text" placeholder="Enter cities separated by comma (e.g. Jakarta,Surabaya)" />
+        <button id="btn-compare">Compare</button>
+        <span id="cmp-loading" style="display:none; margin-left:8px;">Loading…</span>
       </div>
+
+      <div id="compare-meta" class="compare-meta">
+        <div id="compare-count" class="muted"></div>
+        <div id="compare-explanation" class="compare-explanation"></div>
+      </div>
+
+      <div class="charts">
+        <div class="chart" id="compare-chart-temp" aria-label="Comparison chart"></div>
+        <div class="chart" id="compare-chart-pm25" aria-label="Comparison chart (PM2.5)"></div>
+      </div>
+
       <div id="compare-summary" class="pills"></div>
     </section>
 

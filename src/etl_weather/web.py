@@ -334,8 +334,8 @@ async def fetch_city_data(city: str, days: int = 7, timezone: str = "auto") -> p
     # Calculate daily averages for air quality
     hourly_air = pd.DataFrame({
         'time': pd.to_datetime(air_data['hourly']['time']),
-        'pm25': air_data['hourly']['pm2_5'],
-        'pm10': air_data['hourly']['pm10']
+        'pm25': air_data['hourly'].get('pm2_5') or air_data['hourly'].get('pm25') or [],
+        'pm10': air_data['hourly'].get('pm10') or []
     })
     hourly_air['date'] = hourly_air['time'].dt.date
     daily_air = hourly_air.groupby('date').agg({
@@ -343,6 +343,8 @@ async def fetch_city_data(city: str, days: int = 7, timezone: str = "auto") -> p
         'pm10': 'mean'
     }).reset_index()
     daily_air['date'] = pd.to_datetime(daily_air['date'])
+    # normalize column names expected by frontend
+    daily_air = daily_air.rename(columns={'pm25': 'pm25_avg', 'pm10': 'pm10_avg'})
     
     # Merge weather and air quality data
     daily_data = pd.merge(daily_weather, daily_air, on='date', how='left')
@@ -362,33 +364,35 @@ async def compare(
             status_code=400, detail="Butuh minimal dua kota untuk perbandingan."
         )
     
-    # Fetch data for all cities concurrently
-    dfs = []
+    # Fetch data for all cities, but be tolerant: collect failures per-city
+    results = []
+    failed = []
     for city in city_list:
         try:
             df = await fetch_city_data(city, days, timezone)
-            dfs.append(df)
+            records = df.to_dict(orient="records")
+            results.append({"name": city, "daily": records, "error": None})
         except HTTPException as e:
-            # Pass through HTTP exceptions with proper status codes
-            raise e
+            # keep per-city HTTP error and continue
+            failed.append({"city": city, "status": e.status_code, "detail": str(e.detail)})
+            results.append({"name": city, "daily": [], "error": str(e.detail)})
         except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error mengambil data untuk {city}: {str(e)}"
-            )
-    
-    # Combine all city data
-    if dfs:
-        merged = pd.concat(dfs, ignore_index=True)
-        records = merged.to_dict(orient="records")
-        return {
-            "cities": city_list,
-            "count": len(records),
-            "days": days,
-            "data": records
-        }
-    else:
-        raise HTTPException(status_code=500, detail="Gagal mengambil data untuk semua kota")
+            # catch-all: record failure and continue
+            failed.append({"city": city, "status": 500, "detail": str(e)})
+            results.append({"name": city, "daily": [], "error": str(e)})
+
+    # require at least two successful cities for a meaningful comparison
+    success_count = sum(1 for r in results if r.get("daily"))
+    if success_count < 2:
+        # include failures in the response to help debugging
+        raise HTTPException(status_code=500, detail={"message": "Not enough successful city data for comparison", "results": results, "failed": failed})
+
+    # Combine all successful city data into flattened rows for backward compatibility
+    dfs = [pd.DataFrame(r["daily"]) for r in results if r.get("daily")]
+    merged = pd.concat(dfs, ignore_index=True)
+    records = merged.to_dict(orient="records")
+
+    return {"cities": results, "count": len(records), "days": days, "data": records, "failed": failed}
 
 
 def main() -> None:
