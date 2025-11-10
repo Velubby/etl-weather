@@ -23,19 +23,33 @@
         </div>
         <div class="searchbox">
           <div class="search-container">
-            <div class="search-row">
-              <div class="search-group">
-                <input id="q" type="text" class="search-input" placeholder="Search city..." />
-                <button id="btn-search">Search</button>
+            <div class="search-tabs">
+              <div class="search-tab active" data-target="text-search">Search by Text</div>
+              <div class="search-tab" data-target="region-search">Search by Region</div>
+            </div>
+            <div class="search-panels">
+              <div class="search-panel active" id="text-search">
+                <div class="search-group">
+                  <div class="search-input-wrapper">
+                    <i class="search-icon">🔍</i>
+                    <input id="q" type="text" class="search-input" placeholder="Enter city name..." />
+                  </div>
+                  <button id="btn-search" class="search-button">Search</button>
+                </div>
               </div>
-              <div class="search-divider">atau</div>
-              <div class="region-group">
-                <select id="province-select" class="region-select">
-                  <option value="">Pilih Provinsi...</option>
-                </select>
-                <select id="regency-select" class="region-select" disabled>
-                  <option value="">Pilih Kota/Kabupaten...</option>
-                </select>
+              <div class="search-panel" id="region-search">
+                <div class="region-group">
+                  <div class="select-wrapper">
+                    <select id="province-select" class="region-select">
+                      <option value="">Pilih Provinsi...</option>
+                    </select>
+                  </div>
+                  <div class="select-wrapper">
+                    <select id="regency-select" class="region-select" disabled>
+                      <option value="">Pilih Kota/Kabupaten...</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -8,6 +8,22 @@ const regencySelect = el('#regency-select');
 let selectedCity = null;
 let lastHourlyRows = null; // reserved for future use
 
+// Handle search tabs
+document.querySelectorAll('.search-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        // Remove active class from all tabs and panels
+        document.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.search-panel').forEach(p => p.classList.remove('active'));
+        
+        // Add active class to clicked tab and corresponding panel
+        tab.classList.add('active');
+        const targetPanel = document.getElementById(tab.dataset.target);
+        if (targetPanel) {
+            targetPanel.classList.add('active');
+        }
+    });
+});
+
 // Load provinces on page load
 async function loadProvinces() {
     try {
