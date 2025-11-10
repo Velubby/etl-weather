@@ -312,14 +312,45 @@ async def fetch_city_data(city: str, days: int = 7, timezone: str = "auto") -> p
     
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
+            # fetch weather
             weather_resp = await client.get("https://api.open-meteo.com/v1/forecast", params=weather_params)
-            air_resp = await client.get("https://air-quality-api.open-meteo.com/v1/air-quality", params=air_params)
-            
-            weather_resp.raise_for_status()
-            air_resp.raise_for_status()
-            
-            weather_data = weather_resp.json()
-            air_data = air_resp.json()
+            try:
+                weather_resp.raise_for_status()
+                weather_data = weather_resp.json()
+            except Exception as e:
+                raise HTTPException(status_code=502, detail=f"Weather API failed for {city}: {str(e)}")
+
+            # fetch air quality separately; if it fails we continue with empty air data
+            air_data = {"hourly": {"time": [], "pm2_5": [], "pm10": []}}
+            try:
+                air_resp = await client.get("https://air-quality-api.open-meteo.com/v1/air-quality", params=air_params)
+                try:
+                    air_resp.raise_for_status()
+                    air_data = air_resp.json()
+                except Exception as e:
+                    # log full response body for debugging but do not raise
+                    try:
+                        body = air_resp.text
+                    except Exception:
+                        body = "<no-body>"
+                    import logging
+
+                    logging.getLogger(__name__).warning(
+                        "Air quality API returned non-2xx for %s (%s): %s",
+                        city,
+                        getattr(air_resp, 'status_code', 'unknown'),
+                        body,
+                    )
+                    # keep air_data as empty structure so downstream merges yield NaN values
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Air quality API request failed for %s: %s", city, str(e)
+                )
+                # leave air_data as empty structure
+    except HTTPException:
+        # re-raise HTTP exceptions from above
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gagal mengambil data: {str(e)}")
     
