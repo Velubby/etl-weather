@@ -72,14 +72,19 @@
       </div>
       <div id="city-funfact" class="fun-fact hidden">
         <strong>Fun Fact:</strong> <span id="funfact-text">-</span>
-        <button id="btn-funfact-refresh" title="Get a new variant" style="margin-left:8px">New variant</button>
+        <button id="btn-funfact-refresh" class="refresh-btn" title="Get a new variant" style="margin-left:8px">
+          <svg class="refresh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
         <span id="funfact-loading" class="muted" style="margin-left:8px; display:none;">Loading…</span>
-        <span id="ai-status" class="ai-status" role="status" aria-live="polite" title="AI status" style="margin-left:12px;">AI: —</span>
       </div>
       <div class="buttons">
-        <button id="btn-today">Load Today</button>
-        <button id="btn-daily">Load Daily</button>
-        <button id="btn-hourly">Load Hourly</button>
+        <button id="btn-today" class="action-btn"><span class="btn-icon">☀</span> Today's Weather</button>
+        <button id="btn-daily" class="action-btn"><span class="btn-icon">📆</span> 7-Day Forecast</button>
+        <button id="btn-hourly" class="action-btn"><span class="btn-icon">⏰</span> Next 24 Hours</button>
       </div>
     </section>
 

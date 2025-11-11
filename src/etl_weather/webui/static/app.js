@@ -342,6 +342,14 @@ function renderDailyCards(rows){
 
 // Reset/hide views when city changes to avoid stale content
 function resetViewsOnCityChange(){
+  // Hide fun fact when searching for a new city
+  const funFactEl = el('#city-funfact');
+  if (funFactEl) {
+    funFactEl.classList.add('hidden');
+    const funFactText = el('#funfact-text');
+    if (funFactText) funFactText.textContent = '-';
+  }
+  
   // Hide Daily and clear content
   const daily = el('#daily');
   if (daily) {
@@ -655,7 +663,16 @@ function dailyPm25Spec(rows){
 
 async function loadDaily() {
   if (!selectedCity) return alert('Select a city first');
-  el('#daily').classList.remove('hidden');
+  
+  // Hide all other sections first
+  const todaySection = el('#today');
+  const hourlySection = el('#hourly');
+  if (todaySection) todaySection.classList.add('hidden');
+  if (hourlySection) hourlySection.classList.add('hidden');
+  
+  // Show Daily section and refresh
+  const dailySection = el('#daily');
+  dailySection.classList.remove('hidden');
   el('#daily-summary').textContent = 'Loading...';
   const res = await fetch(`/data/daily?city=${encodeURIComponent(selectedCity)}&refresh=true`);
   const data = await res.json();
@@ -710,7 +727,16 @@ async function loadDaily() {
 
 async function loadToday(){
   if (!selectedCity) return alert('Select a city first');
-  el('#today').classList.remove('hidden');
+  
+  // Hide all other sections first
+  const dailySection = el('#daily');
+  const hourlySection = el('#hourly');
+  if (dailySection) dailySection.classList.add('hidden');
+  if (hourlySection) hourlySection.classList.add('hidden');
+  
+  // Show Today section and refresh
+  const todaySection = el('#today');
+  todaySection.classList.remove('hidden');
   const hero = el('#today-hero');
   const details = el('#today-details');
   hero.innerHTML = 'Loading…';
@@ -791,7 +817,16 @@ async function loadToday(){
 
 async function loadHourly() {
   if (!selectedCity) return alert('Select a city first');
-  el('#hourly').classList.remove('hidden');
+  
+  // Hide all other sections first
+  const todaySection = el('#today');
+  const dailySection = el('#daily');
+  if (todaySection) todaySection.classList.add('hidden');
+  if (dailySection) dailySection.classList.add('hidden');
+  
+  // Show Hourly section and refresh
+  const hourlySection = el('#hourly');
+  hourlySection.classList.remove('hidden');
   const res = await fetch(`/data/hourly?city=${encodeURIComponent(selectedCity)}&refresh=true`);
   const data = await res.json();
   const rows = data.data || [];
@@ -986,33 +1021,7 @@ if (btnFunfact){
   });
 }
 
-// AI status: fetch /ai/status and update pill
-async function fetchAiStatus() {
-  const pill = el('#ai-status');
-  if (!pill) return;
-  try {
-    const res = await fetch('/ai/status?t=' + Date.now());
-    if (!res.ok) throw new Error('status non-ok');
-    const j = await res.json();
-    // decide class by generate_ok and api_key presence
-    const ok = j.generate_ok === true && (j.api_key_present === true || j.sdk_ok === true);
-    const warn = j.generate_ok === false && (j.api_key_present === true || j.sdk_ok === true);
-    const model = j.model_used || (Array.isArray(j.models) && j.models[0]) || 'unknown';
-    const text = `AI: ${model.split('/').pop()}`;
-    const dot = ok ? 'ok' : (warn ? 'warn' : 'bad');
-    pill.classList.remove('ok','warn','bad');
-    pill.classList.add(ok ? 'ok' : (warn ? 'warn' : 'bad'));
-    pill.innerHTML = `<span class="dot ${dot}"></span>${text}`;
-    pill.title = `AI status — model: ${model}\ngenerate_ok: ${j.generate_ok}\nsdk_ok: ${j.sdk_ok}\napi_key_present: ${j.api_key_present}${j.error?`\nerror: ${j.error}`:''}`;
-  } catch (e){
-    pill.classList.remove('ok','warn'); pill.classList.add('bad');
-    pill.innerHTML = `<span class="dot bad"></span>AI: unavailable`;
-    pill.title = `AI status unreachable`;
-  }
-}
-
-// initial fetch and periodic refresh
-try { fetchAiStatus(); setInterval(fetchAiStatus, 60 * 1000); } catch (e) {}
+// AI status removed - no longer needed
 
 // Interactive search: debounce + keyboard navigation
 const searchInput = el('#q');
