@@ -4,22 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "etl-weather"
-version = "0.1.0"
-description = "ETL Cuaca & Kualitas Udara (Open-Meteo) -> Laporan HTML"
+version = "1.0.0"
+description = "ETL Cuaca & Kualitas Udara (Open-Meteo) -> GGWP Weather - Web UI"
 requires-python = ">=3.10"
 dependencies = [
   "typer[all]",
-  "httpx>=0.27",
-  "pandas>=2.2",
-  "altair>=5.0",
-  "jinja2>=3.1",
-  "pydantic>=2.7",
-  "pydantic-settings>=2.3",
-  "fastapi>=0.110",
-  "uvicorn[standard]>=0.23",
-  "aiofiles>=23.0",
-  "python-dotenv>=1.0"
-]
+  "httpx>=0.28",
+  "pandas>=2.3.3",
+  "altair>=5.5.0",
+  "jinja2>=3.1.6",
+  "pydantic>=2.12.4",
+  "pydantic-settings>=2.11",
+  "fastapi>=0.121",
+  "uvicorn[standard]>=0.38",
+  "aiofiles>=25.1.0",
+  "python-dotenv>=1.2.1"
+  "google-generativeai>=0.8.5"
 
 [project.scripts]
 etl-weather = "etl_weather.cli:app"
@@ -27,10 +27,7 @@ etl-weather-web = "etl_weather.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[project.optional-dependencies]
-ai = [
-  "google-generativeai>=0.8"
+  
 ]
 
 dev = [
