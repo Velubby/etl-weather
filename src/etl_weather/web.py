@@ -36,16 +36,14 @@ def _load_csv(path: Path) -> pd.DataFrame:
 
 async def _fetch_provinces() -> list[dict]:
     url = "https://wilayah.id/api/provinces.json"
-    headers = {
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache"
-    }
+    headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
     try:
         timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(url, headers=headers)
             r.raise_for_status()
             import logging
+
             logging.info(f"Provinces raw response: {r.text[:200]}...")
             data = r.json()
             # Transform the data to ensure it has the correct structure
@@ -59,40 +57,50 @@ async def _fetch_provinces() -> list[dict]:
                     provinces = [{"id": k, "name": v} for k, v in data.items()]
             elif isinstance(data, list):
                 provinces = data
-            
+
             # Ensure each province has the required fields
             formatted_provinces = []
             for prov in provinces:
                 if isinstance(prov, dict):
-                    prov_id = prov.get("id") or prov.get("province_id") or prov.get("code")
-                    prov_name = prov.get("name") or prov.get("province_name") or prov.get("nama")
+                    prov_id = (
+                        prov.get("id") or prov.get("province_id") or prov.get("code")
+                    )
+                    prov_name = (
+                        prov.get("name")
+                        or prov.get("province_name")
+                        or prov.get("nama")
+                    )
                     if prov_id and prov_name:
-                        formatted_provinces.append({"id": str(prov_id), "name": prov_name})
-            
+                        formatted_provinces.append(
+                            {"id": str(prov_id), "name": prov_name}
+                        )
+
             logging.info(f"Formatted provinces: {formatted_provinces}")
             return formatted_provinces
     except httpx.HTTPError as e:
         import logging
+
         logging.error(f"Error fetching provinces: {str(e)}")
         return []
+
 
 async def _fetch_regencies(province_code: str) -> list[dict]:
     # The API expects just the number, remove any prefix if present
     if "-" in province_code:
         province_code = province_code.split("-")[0]
-    
+
     url = f"https://wilayah.id/api/regencies/{province_code}.json"
-    headers = {
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache"
-    }
+    headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
     try:
         timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(url, headers=headers)
             r.raise_for_status()
             import logging
-            logging.info(f"Regencies response for {province_code}: {r.text[:200]}...")  # Log first 200 chars
+
+            logging.info(
+                f"Regencies response for {province_code}: {r.text[:200]}..."
+            )  # Log first 200 chars
             data = r.json()
             if isinstance(data, list):
                 return data
@@ -107,8 +115,10 @@ async def _fetch_regencies(province_code: str) -> list[dict]:
             return data
     except httpx.HTTPError as e:
         import logging
+
         logging.error(f"Error fetching regencies: {str(e)}")
         return []
+
 
 async def _geocode_search(
     query: str, count: int = 5, language: str = "id"
@@ -151,6 +161,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Add headers middleware to prevent caching
 @app.middleware("http")
 async def add_no_cache_headers(request: Request, call_next):
@@ -161,16 +172,19 @@ async def add_no_cache_headers(request: Request, call_next):
         response.headers["Expires"] = "0"
     return response
 
+
 # API Routes
 @app.get("/api/provinces")
 async def get_provinces() -> dict:
     provinces = await _fetch_provinces()
     return {"results": provinces}
 
+
 @app.get("/api/regencies/{province_code}")
 async def get_regencies(province_code: str) -> dict:
     regencies = await _fetch_regencies(province_code)
     return {"results": regencies}
+
 
 # Prefer the source tree during development; fall back to package path when installed.
 def _resolve_webui_dir() -> Path:
@@ -317,16 +331,6 @@ async def ai_status() -> dict:
     }
 
 
-@app.get("/api/provinces")
-async def get_provinces() -> dict:
-    provinces = await _fetch_provinces()
-    return {"results": provinces}
-
-@app.get("/api/regencies/{province_code}")
-async def get_regencies(province_code: str) -> dict:
-    regencies = await _fetch_regencies(province_code)
-    return {"results": regencies}
-
 @app.get("/search")
 async def search(
     q: str = Query(..., description="Nama kota untuk dicari"), count: int = 5
@@ -390,15 +394,17 @@ async def data_hourly(city: str, refresh: bool = False) -> dict:
 # Download endpoint removed for simplified user-facing UI
 
 
-async def fetch_city_data(city: str, days: int = 7, timezone: str = "auto") -> pd.DataFrame:
+async def fetch_city_data(
+    city: str, days: int = 7, timezone: str = "auto"
+) -> pd.DataFrame:
     """Fetch and transform city data directly from API without saving locally."""
     loc = await _geocode_search(city, count=1)
     if not loc:
         raise HTTPException(status_code=404, detail=f"Kota tidak ditemukan: {city}")
-    
+
     city_info = loc[0]
     lat, lon = city_info["lat"], city_info["lon"]
-    
+
     # Fetch weather and air quality data
     weather_params = {
         "latitude": lat,
@@ -415,25 +421,32 @@ async def fetch_city_data(city: str, days: int = 7, timezone: str = "auto") -> p
         "forecast_days": days,
         "timezone": timezone,
     }
-    
+
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             # fetch weather
-            weather_resp = await client.get("https://api.open-meteo.com/v1/forecast", params=weather_params)
+            weather_resp = await client.get(
+                "https://api.open-meteo.com/v1/forecast", params=weather_params
+            )
             try:
                 weather_resp.raise_for_status()
                 weather_data = weather_resp.json()
             except Exception as e:
-                raise HTTPException(status_code=502, detail=f"Weather API failed for {city}: {str(e)}")
+                raise HTTPException(
+                    status_code=502, detail=f"Weather API failed for {city}: {str(e)}"
+                )
 
             # fetch air quality separately; if it fails we continue with empty air data
             air_data = {"hourly": {"time": [], "pm2_5": [], "pm10": []}}
             try:
-                air_resp = await client.get("https://air-quality-api.open-meteo.com/v1/air-quality", params=air_params)
+                air_resp = await client.get(
+                    "https://air-quality-api.open-meteo.com/v1/air-quality",
+                    params=air_params,
+                )
                 try:
                     air_resp.raise_for_status()
                     air_data = air_resp.json()
-                except Exception as e:
+                except Exception:
                     # log full response body for debugging but do not raise
                     try:
                         body = air_resp.text
@@ -444,12 +457,13 @@ async def fetch_city_data(city: str, days: int = 7, timezone: str = "auto") -> p
                     logging.getLogger(__name__).warning(
                         "Air quality API returned non-2xx for %s (%s): %s",
                         city,
-                        getattr(air_resp, 'status_code', 'unknown'),
+                        getattr(air_resp, "status_code", "unknown"),
                         body,
                     )
                     # keep air_data as empty structure so downstream merges yield NaN values
             except Exception as e:
                 import logging
+
                 logging.getLogger(__name__).warning(
                     "Air quality API request failed for %s: %s", city, str(e)
                 )
@@ -459,40 +473,48 @@ async def fetch_city_data(city: str, days: int = 7, timezone: str = "auto") -> p
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gagal mengambil data: {str(e)}")
-    
+
     # Transform data to daily format
-    daily_weather = pd.DataFrame({
-        'date': pd.to_datetime(weather_data['daily']['time']),
-        'temp_min': weather_data['daily']['temperature_2m_min'],
-        'temp_max': weather_data['daily']['temperature_2m_max'],
-        'total_rain': weather_data['daily']['precipitation_sum']
-    })
-    
+    daily_weather = pd.DataFrame(
+        {
+            "date": pd.to_datetime(weather_data["daily"]["time"]),
+            "temp_min": weather_data["daily"]["temperature_2m_min"],
+            "temp_max": weather_data["daily"]["temperature_2m_max"],
+            "total_rain": weather_data["daily"]["precipitation_sum"],
+        }
+    )
+
     # Calculate daily averages for air quality
-    hourly_air = pd.DataFrame({
-        'time': pd.to_datetime(air_data['hourly']['time']),
-        'pm25': air_data['hourly'].get('pm2_5') or air_data['hourly'].get('pm25') or [],
-        'pm10': air_data['hourly'].get('pm10') or []
-    })
-    hourly_air['date'] = hourly_air['time'].dt.date
-    daily_air = hourly_air.groupby('date').agg({
-        'pm25': 'mean',
-        'pm10': 'mean'
-    }).reset_index()
-    daily_air['date'] = pd.to_datetime(daily_air['date'])
+    hourly_air = pd.DataFrame(
+        {
+            "time": pd.to_datetime(air_data["hourly"]["time"]),
+            "pm25": air_data["hourly"].get("pm2_5")
+            or air_data["hourly"].get("pm25")
+            or [],
+            "pm10": air_data["hourly"].get("pm10") or [],
+        }
+    )
+    hourly_air["date"] = hourly_air["time"].dt.date
+    daily_air = (
+        hourly_air.groupby("date").agg({"pm25": "mean", "pm10": "mean"}).reset_index()
+    )
+    daily_air["date"] = pd.to_datetime(daily_air["date"])
     # normalize column names expected by frontend
-    daily_air = daily_air.rename(columns={'pm25': 'pm25_avg', 'pm10': 'pm10_avg'})
-    
+    daily_air = daily_air.rename(columns={"pm25": "pm25_avg", "pm10": "pm10_avg"})
+
     # Merge weather and air quality data
-    daily_data = pd.merge(daily_weather, daily_air, on='date', how='left')
-    daily_data['city'] = city
-    
+    daily_data = pd.merge(daily_weather, daily_air, on="date", how="left")
+    daily_data["city"] = city
+
     return daily_data
+
 
 @app.get("/compare")
 async def compare(
     cities: str = Query(..., description="Daftar kota dipisah koma"),
-    days: int = Query(7, description="Jumlah hari untuk perbandingan (1-16)", ge=1, le=16),
+    days: int = Query(
+        7, description="Jumlah hari untuk perbandingan (1-16)", ge=1, le=16
+    ),
     timezone: str = Query("auto", description="Zona waktu (default: auto)"),
 ) -> dict:
     city_list: List[str] = [c.strip() for c in cities.split(",") if c.strip()]
@@ -500,7 +522,7 @@ async def compare(
         raise HTTPException(
             status_code=400, detail="Butuh minimal dua kota untuk perbandingan."
         )
-    
+
     # Fetch data for all cities, but be tolerant: collect failures per-city
     results = []
     failed = []
@@ -511,7 +533,9 @@ async def compare(
             results.append({"name": city, "daily": records, "error": None})
         except HTTPException as e:
             # keep per-city HTTP error and continue
-            failed.append({"city": city, "status": e.status_code, "detail": str(e.detail)})
+            failed.append(
+                {"city": city, "status": e.status_code, "detail": str(e.detail)}
+            )
             results.append({"name": city, "daily": [], "error": str(e.detail)})
         except Exception as e:
             # catch-all: record failure and continue
@@ -522,14 +546,27 @@ async def compare(
     success_count = sum(1 for r in results if r.get("daily"))
     if success_count < 2:
         # include failures in the response to help debugging
-        raise HTTPException(status_code=500, detail={"message": "Not enough successful city data for comparison", "results": results, "failed": failed})
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Not enough successful city data for comparison",
+                "results": results,
+                "failed": failed,
+            },
+        )
 
     # Combine all successful city data into flattened rows for backward compatibility
     dfs = [pd.DataFrame(r["daily"]) for r in results if r.get("daily")]
     merged = pd.concat(dfs, ignore_index=True)
     records = merged.to_dict(orient="records")
 
-    return {"cities": results, "count": len(records), "days": days, "data": records, "failed": failed}
+    return {
+        "cities": results,
+        "count": len(records),
+        "days": days,
+        "data": records,
+        "failed": failed,
+    }
 
 
 def main() -> None:

@@ -8,7 +8,12 @@ Ambil data cuaca + kualitas udara per jam, agregasi harian, visualisasi, dan ren
 # Clone dan install
 git clone https://github.com/Velubby/etl-weather.git
 cd etl-weather
-pip install -e ".[ai,dev]"
+
+# Install dari pyproject.toml (includes all dependencies)
+pip install -e .
+
+# Install dengan dev tools (testing, linting)
+pip install -e ".[dev]"
 
 # Setup environment (opsional untuk fitur AI)
 cp .env.example .env
@@ -96,6 +101,26 @@ GEMINI_MODEL=gemini-2.5-flash
 
 Model yang diutamakan: `gemini-2.5-flash` untuk respons cepat dan varied output.
 
+## Deployment (DirectAdmin/Passenger)
+
+Untuk hosting di DirectAdmin dengan Passenger:
+
+```bash
+# Di server, activate virtualenv yang disediakan DirectAdmin
+source /home/username/virtualenv/path/to/app/3.11/bin/activate
+
+# Install dependencies
+pip install -e .
+
+# Buat .env file
+printf "GEMINI_API_KEY=your_key\nGEMINI_MODEL=gemini-2.5-flash\n" > .env
+
+# Passenger akan otomatis load dari passenger_wsgi.py
+# Restart app di DirectAdmin panel
+```
+
+File `passenger_wsgi.py` sudah include manual ASGI→WSGI adapter, tidak perlu package tambahan.
+
 ## Teknologi Stack
 
 - **Backend**: FastAPI, Uvicorn, Pandas, Pydantic
@@ -103,6 +128,7 @@ Model yang diutamakan: `gemini-2.5-flash` untuk respons cepat dan varied output.
 - **Data Source**: Open-Meteo API (weather & air quality)
 - **AI**: Google Gemini (fun facts dengan caching & variation)
 - **Region Data**: wilayah.id API (Indonesian provinces/regencies)
+- **Deployment**: Passenger WSGI (DirectAdmin compatible)
 
 ## Troubleshooting
 
