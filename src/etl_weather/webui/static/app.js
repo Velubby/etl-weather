@@ -6,6 +6,7 @@ const provinceSelect = el('#province-select');
 const regencySelect = el('#regency-select');
 
 let selectedCity = null;
+let selectedPlace = null; // holds last chosen search item with admin1/country/lat/lon
 let lastHourlyRows = null; // reserved for future use
 
 // Handle search tabs
@@ -206,6 +207,7 @@ function updateActiveResult(){
 
 async function fetchCityFunFact(city, opts = {}) {
   const { fast = true, fresh = false } = opts;
+  const meta = (opts && opts.meta != null) ? opts.meta : selectedPlace;
   const loadingEl = el('#funfact-loading');
   const refreshBtn = el('#btn-funfact-refresh');
   try {
@@ -215,6 +217,12 @@ async function fetchCityFunFact(city, opts = {}) {
     if (fresh) params.set('fresh', '1');
     else if (fast) params.set('fast', '1');
     params.set('t', String(Date.now()));
+    if (meta && meta.admin1) params.set('admin1', meta.admin1);
+    if (meta && meta.country) params.set('country', meta.country);
+    if (meta && meta.lat != null && meta.lon != null) {
+      params.set('lat', String(meta.lat));
+      params.set('lon', String(meta.lon));
+    }
     const response = await fetch(`/city/funfact/${encodeURIComponent(city)}?${params.toString()}`);
     if (!response.ok) throw new Error('Failed to fetch fun fact');
     const data = await response.json();
@@ -421,9 +429,10 @@ async function doSearch() {
       li.innerHTML = label.replace(rx, (m) => `<span class="highlight">${m}</span>`);
       li.addEventListener('click', () => {
         selectedCity = it.name;
+        selectedPlace = it;
         selectedCityEl.textContent = selectedCity;
-        // default to fast mode for immediate UX
-        fetchCityFunFact(selectedCity, { fast: true, fresh: false });
+        // default to fast mode for immediate UX; pass metadata for disambiguation
+        fetchCityFunFact(selectedCity, { fast: true, fresh: false, meta: it });
         actionsEl.classList.remove('hidden');
         // close dropdown on select
         resultsEl.classList.remove('open');
@@ -1017,7 +1026,8 @@ const btnFunfact = el('#btn-funfact-refresh');
 if (btnFunfact){
   btnFunfact.addEventListener('click', () => {
     if (!selectedCity) return alert('Select a city first');
-    fetchCityFunFact(selectedCity, { fresh: true });
+    // refresh with remembered metadata for disambiguation
+    fetchCityFunFact(selectedCity, { fresh: true, meta: selectedPlace });
   });
 }
 

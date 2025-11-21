@@ -227,18 +227,28 @@ async def get_city_funfact(
         False,
         description="Cepat: jika ada cache, balas segera dan refresh di background",
     ),
+    lat: float | None = Query(None, description="Latitude untuk disambiguasi"),
+    lon: float | None = Query(None, description="Longitude untuk disambiguasi"),
+    admin1: str | None = Query(None, description="Provinsi/administratif level 1"),
+    country: str | None = Query(None, description="Negara"),
 ) -> dict:
     from .utils import get_city_fun_fact, get_cached_city_fun_fact
 
     try:
         # Fast mode: return cached instantly if available, and refresh in background
         if fast:
-            cached = get_cached_city_fun_fact(city)
+            cached = get_cached_city_fun_fact(
+                city, lat=lat, lon=lon, admin1=admin1, country=country
+            )
             if cached:
-                background_tasks.add_task(get_city_fun_fact, city, True)
+                background_tasks.add_task(
+                    get_city_fun_fact, city, True, lat, lon, admin1, country
+                )
                 return {"city": city, "fun_fact": cached, "source": "cache-fast"}
         # Normal path: generate (may be slower), respecting 'fresh'
-        fun_fact = get_city_fun_fact(city, fresh=fresh)
+        fun_fact = get_city_fun_fact(
+            city, fresh=fresh, lat=lat, lon=lon, admin1=admin1, country=country
+        )
         return {"city": city, "fun_fact": fun_fact, "source": "gemini"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -252,83 +262,6 @@ async def home(request: Request) -> HTMLResponse:
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
-
-
-@app.get("/ai/status")
-async def ai_status() -> dict:
-    """Diagnostic endpoint: checks Gemini env/model availability without exposing secrets."""
-    import os
-
-    try:
-        import google.generativeai as genai  # type: ignore
-
-        sdk_ok = True
-    except Exception:
-        genai = None
-        sdk_ok = False
-
-    api_key_present = bool(os.getenv("GEMINI_API_KEY"))
-    model_env = os.getenv("GEMINI_MODEL") or "(unset)"
-
-    gen_ok = False
-    err = None
-    if api_key_present and sdk_ok and genai is not None and model_env != "(unset)":
-        try:
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            # Try candidates from env (comma-separated allowed) and add 'models/' variants
-            env_list = [s.strip() for s in model_env.split(",") if s.strip()]
-            priority = ["gemini-2.5-flash", "gemini-2.5-pro"]
-            base = env_list + priority
-            expanded = []
-            for name in base:
-                if name.startswith("models/"):
-                    expanded.append(name)
-                    expanded.append(name.replace("models/", "", 1))
-                else:
-                    expanded.append(name)
-                    expanded.append("models/" + name)
-            # dedupe
-            seen = set()
-            candidates = [x for x in expanded if not (x in seen or seen.add(x))]
-            r = None
-            last_err = None
-            if hasattr(genai, "GenerativeModel"):
-                for cand in candidates:
-                    try:
-                        m = genai.GenerativeModel(model_name=cand)
-                        r = m.generate_content(
-                            "Tes status AI singkat.",
-                            generation_config={
-                                "temperature": 0.2,
-                                "max_output_tokens": 8,
-                            },
-                        )
-                        gen_ok = True if r else False
-                        model_env = cand
-                        break
-                    except Exception as e:
-                        last_err = f"{e.__class__.__name__}: {str(e)[:180]}"
-            if not gen_ok and hasattr(genai, "generate_text"):
-                for cand in candidates:
-                    try:
-                        r = genai.generate_text(model=cand, prompt="Tes.")
-                        gen_ok = True if r else False
-                        model_env = cand
-                        break
-                    except Exception as e:
-                        last_err = f"{e.__class__.__name__}: {str(e)[:180]}"
-            if not gen_ok:
-                err = last_err
-        except Exception as e:
-            err = f"{e.__class__.__name__}: {str(e)[:180]}"
-
-    return {
-        "sdk": sdk_ok,
-        "api_key": api_key_present,
-        "model": model_env,
-        "generate_ok": gen_ok,
-        "error": err,
-    }
 
 
 @app.get("/search")
@@ -545,14 +478,10 @@ async def compare(
     # require at least two successful cities for a meaningful comparison
     success_count = sum(1 for r in results if r.get("daily"))
     if success_count < 2:
-        # include failures in the response to help debugging
+        # return minimal error detail in production
         raise HTTPException(
             status_code=500,
-            detail={
-                "message": "Not enough successful city data for comparison",
-                "results": results,
-                "failed": failed,
-            },
+            detail="Not enough successful city data for comparison",
         )
 
     # Combine all successful city data into flattened rows for backward compatibility

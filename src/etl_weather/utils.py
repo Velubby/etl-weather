@@ -49,13 +49,22 @@ def _extract_text_from_genai_response(resp: object) -> str | None:
     return None
 
 
-def get_city_fun_fact(city: str, fresh: bool = False) -> str:
-    """Kembalikan 1 fakta menarik tentang kota, hanya via Gemini.
+def get_city_fun_fact(
+    city: str,
+    fresh: bool = False,
+    lat: float | None = None,
+    lon: float | None = None,
+    admin1: str | None = None,
+    country: str | None = None,
+) -> str:
+    """Kembalikan 1 fakta menarik tentang kota secara kontekstual (lokasi spesifik).
 
-    Catatan:
-    - Tidak menggunakan Wikipedia atau Wikidata.
+    Peningkatan:
+    - Geocoding dipakai untuk mendapatkan koordinat (lat/lon), negara, dan admin1 (provinsi) agar nama kota yang sama bisa dibedakan.
+    - Prompt diperkaya dengan lat/lon & region supaya model tidak memberi fakta generik untuk kota yang ambigu.
+    - Tidak menggunakan Wikipedia atau Wikidata langsung.
     - Variasi dijaga dengan gaya acak dan temperature tinggi.
-    - Jika Gemini tidak tersedia, kembalikan kalimat generik yang tetap bervariasi.
+    - Jika Gemini tidak tersedia, kembalikan pesan yang menjelaskan kebutuhan konfigurasi.
     """
 
     api_key = os.getenv("GEMINI_API_KEY")
@@ -81,15 +90,9 @@ def get_city_fun_fact(city: str, fresh: bool = False) -> str:
         except Exception:
             pass
 
+    # cache will be initialized after we know the final lookup key (location-aware)
     cache = _load_cache()
-    key = city.strip().lower()
-    entry = cache.get(key) if isinstance(cache, dict) else None
     cached_facts: list[str] = []
-    if isinstance(entry, dict):
-        if "facts" in entry and isinstance(entry["facts"], list):
-            cached_facts = [str(x) for x in entry["facts"] if isinstance(x, str)]
-        elif "fact" in entry and isinstance(entry["fact"], str):
-            cached_facts = [entry["fact"]]
 
     # Randomize style and angle to encourage diverse responses every call
     styles = [
@@ -125,11 +128,105 @@ def get_city_fun_fact(city: str, fresh: bool = False) -> str:
     target_words = random.randint(18, 32)
     variation_hint = f"v{random.randint(1000,9999)}-{random.choice('ABCDE')}"
 
+    # Ambil konteks geolokasi untuk disambiguasi
+    geo_context = None
+    # Prefer explicit parameters if provided
+    if lat is not None and lon is not None:
+        geo_context = {
+            "name": city,
+            "country": country,
+            "admin1": admin1,
+            "lat": lat,
+            "lon": lon,
+            "timezone": None,
+        }
+    else:
+        try:
+            # Reuse lightweight public geocoding (Open-Meteo) for single result
+            import httpx
+
+            with httpx.Client(timeout=6.0) as gc:
+                gr = gc.get(
+                    "https://geocoding-api.open-meteo.com/v1/search",
+                    params={
+                        "name": city,
+                        "count": 1,
+                        "language": "id",
+                        "format": "json",
+                    },
+                )
+                if gr.status_code == 200:
+                    gj = gr.json()
+                    if gj.get("results"):
+                        r0 = gj["results"][0]
+                        geo_context = {
+                            "name": r0.get("name") or city,
+                            "country": r0.get("country"),
+                            "admin1": r0.get("admin1"),
+                            "lat": r0.get("latitude"),
+                            "lon": r0.get("longitude"),
+                            "timezone": r0.get("timezone"),
+                        }
+        except Exception:
+            geo_context = None
+
+    location_clause = ""
+    if geo_context:
+        # Build a compact disambiguation string
+        loc_parts = []
+        if geo_context.get("admin1"):
+            loc_parts.append(str(geo_context["admin1"]))
+        if geo_context.get("country"):
+            loc_parts.append(str(geo_context["country"]))
+        coords = None
+        if geo_context.get("lat") is not None and geo_context.get("lon") is not None:
+            coords = f"({geo_context['lat']:.2f}, {geo_context['lon']:.2f})"
+        loc_str = ", ".join(loc_parts) if loc_parts else "lokasi tidak pasti"
+        location_clause = (
+            f"Kota ini merujuk pada '{geo_context.get('name', city)}' di {loc_str} {coords or ''}. "
+            "Jika ada kota lain bernama sama, fokuskan fakta pada lokasi ini. "
+        )
+
+    # Decide cache key (location-aware if possible, legacy fallback otherwise)
+    if (
+        geo_context
+        and geo_context.get("lat") is not None
+        and geo_context.get("lon") is not None
+    ):
+        lat = float(geo_context.get("lat"))
+        lon = float(geo_context.get("lon"))
+        name_norm = str(geo_context.get("name", city)).strip().lower()
+        admin1_norm = str(geo_context.get("admin1") or "").strip().lower()
+        country_norm = str(geo_context.get("country") or "").strip().lower()
+        key = f"{name_norm}|{admin1_norm}|{country_norm}|{lat:.3f},{lon:.3f}"
+    else:
+        key = city.strip().lower()
+
+    # Load cached facts for the chosen key (and support legacy key migration)
+    entry = cache.get(key) if isinstance(cache, dict) else None
+    if isinstance(entry, dict):
+        if "facts" in entry and isinstance(entry["facts"], list):
+            cached_facts = [str(x) for x in entry["facts"] if isinstance(x, str)]
+        elif "fact" in entry and isinstance(entry["fact"], str):
+            cached_facts = [entry["fact"]]
+    # Legacy lookup: if location-aware key not found and we used it, also try plain city
+    if not cached_facts and key != city.strip().lower():
+        legacy_entry = (
+            cache.get(city.strip().lower()) if isinstance(cache, dict) else None
+        )
+        if isinstance(legacy_entry, dict):
+            if "facts" in legacy_entry and isinstance(legacy_entry["facts"], list):
+                cached_facts = [
+                    str(x) for x in legacy_entry["facts"] if isinstance(x, str)
+                ]
+            elif "fact" in legacy_entry and isinstance(legacy_entry["fact"], str):
+                cached_facts = [legacy_entry["fact"]]
+
     prompt_base = (
-        f"Tulis 1 fakta menarik dan informatif tentang kota {city} dalam bahasa Indonesia. "
+        f"{location_clause}Tulis 1 fakta menarik dan informatif tentang kota {city} dalam bahasa Indonesia. "
         f"Gunakan {chosen_style} dengan sudut pandang {chosen_angle} dan {chosen_device}. "
         f"Maksimal 2 kalimat (~{target_words} kata). Hindari frasa pembuka klise seperti 'Tahukah kamu?'. "
-        f"Jangan menyebut sumber. (catatan internal: variasi={variation_hint} — jangan tampilkan catatan ini)"
+        f"Hindari menyebut sumber atau berspekulasi tanpa dasar lokal. (catatan internal: variasi={variation_hint} — jangan tampilkan catatan ini)"
     )
 
     # Use Gemini to generate the sentence
@@ -305,22 +402,49 @@ def get_city_fun_fact(city: str, fresh: bool = False) -> str:
     return "Maaf, belum bisa menampilkan fakta saat ini. Coba lagi nanti."
 
 
-def get_cached_city_fun_fact(city: str) -> str | None:
-    """Return a cached fun fact for a city if available (no network calls)."""
+def get_cached_city_fun_fact(
+    city: str,
+    lat: float | None = None,
+    lon: float | None = None,
+    admin1: str | None = None,
+    country: str | None = None,
+) -> str | None:
+    """Return a cached fun fact for a city if available (no network calls).
+
+    Uses location-aware key if previously stored, but falls back to legacy city-only key.
+    """
     try:
         CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / ".cache"
         CACHE_FILE = CACHE_DIR / "funfacts.json"
         if not CACHE_FILE.exists():
             return None
         cache = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
-        key = city.strip().lower()
-        entry = cache.get(key)
-        if (
-            isinstance(entry, dict)
-            and isinstance(entry.get("facts"), list)
-            and entry["facts"]
-        ):
-            return random.choice([str(x) for x in entry["facts"] if isinstance(x, str)])
+
+        # Compose candidates using explicit parameters first (no network call)
+        key_candidates: list[str] = []
+        if lat is not None and lon is not None:
+            name_norm = city.strip().lower()
+            admin1_norm = (admin1 or "").strip().lower()
+            country_norm = (country or "").strip().lower()
+            key_candidates.append(
+                f"{name_norm}|{admin1_norm}|{country_norm}|{float(lat):.3f},{float(lon):.3f}"
+            )
+
+        # Always include legacy city-only key as a fallback
+        key_candidates.append(city.strip().lower())
+
+        for k in key_candidates:
+            entry = cache.get(k)
+            if (
+                isinstance(entry, dict)
+                and isinstance(entry.get("facts"), list)
+                and entry["facts"]
+            ):
+                return random.choice(
+                    [str(x) for x in entry["facts"] if isinstance(x, str)]
+                )
+            if isinstance(entry, dict) and isinstance(entry.get("fact"), str):
+                return str(entry["fact"])  # very old format
     except Exception:
         return None
     return None

@@ -1,6 +1,9 @@
 import os
 import sys
 
+# Defer importing the FastAPI app until after path adjustments to satisfy E402
+from etl_weather.web import app as asgi_app  # noqa: E402
+
 # Ensure project root is on sys.path
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 if APP_DIR not in sys.path:
@@ -10,9 +13,6 @@ if APP_DIR not in sys.path:
 SRC_DIR = os.path.join(APP_DIR, "src")
 if os.path.isdir(SRC_DIR) and SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
-
-# Import FastAPI ASGI app
-from etl_weather.web import app as asgi_app
 
 # Wrap ASGI app into WSGI for Passenger
 # Try multiple import paths for compatibility
