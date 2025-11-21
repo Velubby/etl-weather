@@ -1068,4 +1068,69 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// Mobile-specific enhancements
+(function initMobileEnhancements() {
+  // Add passive event listeners for better scroll performance
+  const scrollables = document.querySelectorAll('.today-mini, .chart');
+  scrollables.forEach(el => {
+    el.addEventListener('touchstart', function() {}, { passive: true });
+    el.addEventListener('touchmove', function() {}, { passive: true });
+  });
+
+  // Detect mobile device
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (isMobile) {
+    document.body.classList.add('is-mobile');
+  }
+
+  // Prevent double-tap zoom on buttons
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, false);
+
+  // Add touch feedback for interactive elements
+  const interactiveElements = document.querySelectorAll('button, .search-tab, .nav a, .search-results li');
+  interactiveElements.forEach(elem => {
+    elem.addEventListener('touchstart', function() {
+      this.style.opacity = '0.7';
+    }, { passive: true });
+    
+    elem.addEventListener('touchend', function() {
+      this.style.opacity = '1';
+    }, { passive: true });
+    
+    elem.addEventListener('touchcancel', function() {
+      this.style.opacity = '1';
+    }, { passive: true });
+  });
+
+  // Handle viewport height changes on mobile (keyboard appearance)
+  let vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
+  
+  window.addEventListener('resize', () => {
+    vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+  });
+
+  // Smooth scroll for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    });
+  });
+})();
+
 // end of app.js
